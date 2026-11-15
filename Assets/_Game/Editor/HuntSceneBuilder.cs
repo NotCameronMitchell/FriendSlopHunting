@@ -44,6 +44,8 @@ namespace FriendSlop.EditorTools
         static readonly Vector3 TotemPos = new Vector3(0f, 0f, -36f);
         static readonly Vector3 CabinPos = new Vector3(3f, 0f, 16f);
         static readonly Vector3 CampfirePos = new Vector3(2.5f, 0f, 5.5f);
+        static readonly Vector3 LodgePos = new Vector3(-14f, 0f, 14f);
+        static readonly List<Light> _nightLights = new List<Light>();
 
         static readonly Dictionary<string, Material> Mats = new Dictionary<string, Material>();
 
@@ -71,6 +73,7 @@ namespace FriendSlop.EditorTools
             Mats.Clear();
             CreateMaterials();
             NatureArt.Setup();
+            VillageArt.Setup();
 
             var catalog = WeaponCatalogBuilder.CreateOrUpdate();
             var pickup = BuildWeaponPickupPrefab(catalog);
@@ -240,6 +243,7 @@ namespace FriendSlop.EditorTools
 
             root.AddComponent<PlayerHealth>();
             root.AddComponent<PlayerProgress>();
+            root.AddComponent<PlayerUpgrades>();
             var look = root.AddComponent<PlayerAppearance>();
             var lso = new SerializedObject(look);
             lso.FindProperty("nameTagMaterial").objectReferenceValue = Mats.TryGetValue("WorldText", out var tagMat) ? tagMat : null;
@@ -389,7 +393,7 @@ namespace FriendSlop.EditorTools
             for (int i = 0, placed = 0; i < 4000 && placed < 520; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
-                if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p) || NearCabin(p) || !Wild(p, 3f, 30f)) continue;
+                if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || !Wild(p, 3f, 30f)) continue;
                 p.y = GroundY(p);
                 if (p.y > 22f) continue; // bare peaks
                 NatureArt.Tree(trees, p, rng);
@@ -401,7 +405,7 @@ namespace FriendSlop.EditorTools
             for (int i = 0, placed = 0; i < 1200 && placed < 130; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
-                if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || (p - SellZonePos).magnitude < 9f || !Wild(p, 1.5f, 45f)) continue;
+                if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || (p - SellZonePos).magnitude < 9f || !Wild(p, 1.5f, 45f)) continue;
                 p.y = GroundY(p) - 0.25f;
                 NatureArt.Rock(rocks, p, rng);
                 placed++;
@@ -410,9 +414,9 @@ namespace FriendSlop.EditorTools
             var decor = new GameObject("Decor").transform;
             decor.SetParent(world, false);
             NatureArt.Decor(decor, rng, MapHalfSize - 3f, 1500,
-                p => p.magnitude < CampClearRadius + 1f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || (p - SellZonePos).magnitude < 4f || !Wild(p, 0.8f, 32f),
+                p => p.magnitude < CampClearRadius + 1f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || (p - SellZonePos).magnitude < 4f || !Wild(p, 0.8f, 32f),
                 GroundY);
-            NatureArt.Grass(world, MapHalfSize - 1f, new[] { new Vector3(0f, 0f, 7f), new Vector3(GunShopPos.x, GunShopPos.z, 6f), new Vector3(SellZonePos.x, SellZonePos.z, 3.5f), new Vector3(TotemPos.x, TotemPos.z, 2.5f), new Vector3(CabinPos.x, CabinPos.z, 7f), new Vector3(CampfirePos.x, CampfirePos.z, 2.5f) });
+            NatureArt.Grass(world, MapHalfSize - 1f, new[] { new Vector3(0f, 0f, 7f), new Vector3(GunShopPos.x, GunShopPos.z, 6f), new Vector3(SellZonePos.x, SellZonePos.z, 3.5f), new Vector3(TotemPos.x, TotemPos.z, 2.5f), new Vector3(CabinPos.x, CabinPos.z, 7f), new Vector3(CampfirePos.x, CampfirePos.z, 2.5f), new Vector3(LodgePos.x, LodgePos.z, 8f) });
 
             // Invisible walls at the map edge (behind the mountains).
             var bounds = new GameObject("Bounds").transform;
@@ -430,8 +434,10 @@ namespace FriendSlop.EditorTools
             }
 
             BuildGunShop(world, catalog);
-            var lantern = BuildCabin(world);
-            var campfire = BuildCampfire(world);
+            _nightLights.Clear();
+            _nightLights.Add(BuildCabin(world));
+            _nightLights.Add(BuildCampfire(world));
+            BuildLuckyLodge(world);
 
             // Day/night lighting rides on the scene's sun.
             Light sunLight = null;
@@ -445,7 +451,7 @@ namespace FriendSlop.EditorTools
                 vso.FindProperty("sun").objectReferenceValue = sunLight;
                 vso.FindProperty("skybox").objectReferenceValue = RenderSettings.skybox;
                 vso.FindProperty("starShader").objectReferenceValue = Shader.Find("FriendSlop/Stars");
-                SetArray(vso.FindProperty("nightLights"), campfire, lantern);
+                SetArray(vso.FindProperty("nightLights"), _nightLights.ToArray());
                 vso.ApplyModifiedPropertiesWithoutUndo();
             }
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
@@ -465,7 +471,21 @@ namespace FriendSlop.EditorTools
             var camp = new GameObject("Camp").transform;
             camp.gameObject.AddComponent<SafeZone>(); // fighters stay away from camp
 
-            var pad = Visual(PrimitiveType.Cube, "SellPad", camp, SellZonePos + new Vector3(0f, 0.05f, 0f), new Vector3(5f, 0.1f, 5f), "SellPad");
+            // Drop-off deck: kit plank tiles with a timber rim (5 m square, matches the sell trigger).
+            var deck = new GameObject("SellDeck").transform;
+            deck.SetParent(camp, false);
+            deck.position = SellZonePos;
+            deck.rotation = Quaternion.LookRotation(-SellZonePos.normalized);
+            const float tile = 5f / 3f;
+            for (int ix = 0; ix < 3; ix++)
+                for (int iz = 0; iz < 3; iz++)
+                    VillageArt.Piece(ix == 1 && iz == 1 ? "Floor_WoodDark" : "Floor_WoodLight", deck, new Vector3((ix - 1) * tile, 0.09f, (iz - 1) * tile), (ix + iz) % 2 * 90f, solid: false, scale: tile / 2f);
+            Solid(deck, "DeckBase", new Vector3(0f, 0.04f, 0f), new Vector3(5f, 0.08f, 5f), "Plank");
+            for (int s = -1; s <= 1; s += 2)
+            {
+                Visual(PrimitiveType.Cube, "Rim", deck, new Vector3(s * 2.55f, 0.1f, 0f), new Vector3(0.18f, 0.2f, 5.3f), "Bark");
+                Visual(PrimitiveType.Cube, "Rim", deck, new Vector3(0f, 0.1f, s * 2.55f), new Vector3(5.3f, 0.2f, 0.18f), "Bark");
+            }
             var sell = new GameObject("SellZone");
             sell.transform.SetParent(camp, false);
             sell.transform.position = SellZonePos + Vector3.up * 1.5f;
@@ -479,6 +499,33 @@ namespace FriendSlop.EditorTools
             trader.position = SellZonePos + new Vector3(3.6f, 0f, 0f);
             trader.rotation = Quaternion.LookRotation(-SellZonePos.normalized);
             Npc(trader, "outfit_barbarian", "head_barbarian", "bearhat", "none", 7);
+            // Market stall over the trader, with crates and a cart.
+            for (int s = -1; s <= 1; s += 2)
+            {
+                VillageArt.Piece("Corner_Exterior_Wood", trader, new Vector3(s * 1.2f, 0f, 0.9f), 0f, scale: 0.85f);
+                VillageArt.Piece("Corner_Exterior_Wood", trader, new Vector3(s * 1.2f, 0f, -1.1f), 0f, scale: 0.85f);
+                VillageArt.Piece("Roof_Wooden_2x1", trader, new Vector3(s * 1.13f, 2.55f, -1.2f), 0f, solid: false);
+            }
+            VillageArt.Piece("Prop_Crate", trader, new Vector3(2.0f, 0f, -0.6f), 10f);
+            VillageArt.Piece("Prop_Crate", trader, new Vector3(2.0f, 1.06f, -0.6f), 40f, scale: 0.75f);
+            VillageArt.Piece("Prop_Crate", trader, new Vector3(-2.0f, 0f, -0.2f), -15f, scale: 0.85f);
+            VillageArt.Piece("Prop_Wagon", trader, new Vector3(-2.2f, 0f, -3.4f), 80f);
+
+            // A rustic fence ring around camp, with gaps to walk through.
+            var fences = new GameObject("CampFence").transform;
+            fences.SetParent(world, false);
+            const float fenceR = 24f;
+            int segs = Mathf.RoundToInt(2f * Mathf.PI * fenceR / 2.06f);
+            for (int i = 0; i < segs; i++)
+            {
+                if (i % 5 >= 3) continue; // three panels, then a gap
+                float a = i * Mathf.PI * 2f / segs;
+                var p = new Vector3(Mathf.Cos(a) * fenceR, 0f, Mathf.Sin(a) * fenceR);
+                if (NearGunShop(p) || NearCabin(p) || NearLodge(p) || Mathf.Abs(p.x) < 4f && p.z < 0f) continue; // keep the totem trail open
+                p.y = GroundY(p) - 0.03f;
+                var fence = VillageArt.Piece("Prop_WoodenFence_Single", fences, p, -a * Mathf.Rad2Deg + 90f);
+                if (fence) fence.transform.position = p;
+            }
 
             var sign = new GameObject("Sign");
             sign.transform.SetParent(camp, false);
@@ -497,14 +544,6 @@ namespace FriendSlop.EditorTools
                 text.font = font;
                 sign.GetComponent<MeshRenderer>().sharedMaterial = font.material;
                 AddWorldText(sign);
-            }
-
-            // A couple of physics boxes to mess around with at camp.
-            for (int i = 0; i < 2; i++)
-            {
-                var b = (GameObject)PrefabUtility.InstantiatePrefab(boxPrefab, scene);
-                b.transform.position = new Vector3(-5f - i * 1.6f, 0.7f, 4f + i * 1.2f);
-                b.name = $"PhysicsBox_{i + 1}";
             }
 
             // ---------- Networked scene objects ----------
@@ -576,20 +615,28 @@ namespace FriendSlop.EditorTools
             shop.SetParent(parent, false);
             shop.position = GunShopPos;
 
-            // Shell (local space: open front faces +X, toward camp)
-            Solid(shop, "Floor", new Vector3(0f, 0.1f, 0f), new Vector3(6f, 0.2f, 7.5f), "Bark");
-            Solid(shop, "BackWall", new Vector3(-3f, 1.7f, 0f), new Vector3(0.3f, 3.2f, 7.5f), "Plank");
-            Solid(shop, "WallN", new Vector3(0f, 1.7f, 3.6f), new Vector3(6f, 3.2f, 0.3f), "Plank");
-            Solid(shop, "WallS", new Vector3(0f, 1.7f, -3.6f), new Vector3(6f, 3.2f, 0.3f), "Plank");
-            Solid(shop, "Roof", new Vector3(0.3f, 3.45f, 0f), new Vector3(7f, 0.25f, 8.2f), "Roof");
-            Solid(shop, "Counter", new Vector3(1.6f, 0.6f, 0f), new Vector3(0.8f, 1.0f, 4.2f), "Bark");
-            Solid(shop, "PostN", new Vector3(2.9f, 1.7f, 3.6f), new Vector3(0.3f, 3.2f, 0.3f), "Bark");
-            Solid(shop, "PostS", new Vector3(2.9f, 1.7f, -3.6f), new Vector3(0.3f, 3.2f, 0.3f), "Bark");
+            // Shell from the village kit. The shell's +Z is the shop's open front (+X, toward camp).
+            var shell = new GameObject("Shell").transform;
+            shell.SetParent(shop, false);
+            shell.localRotation = Quaternion.Euler(0f, 90f, 0f);
+            const string brick = "Wall_UnevenBrick_Straight", brickWin = "Wall_UnevenBrick_Window_Wide_Round";
+            VillageArt.Floor(shell, 4, 3, "Floor_WoodDark");
+            VillageArt.Wall(shell, 4, 3, VillageArt.Side.Back, brick, brick, brick, brick); // the weapon rack hangs here
+            VillageArt.Wall(shell, 4, 3, VillageArt.Side.Left, brick, brickWin, brick);
+            VillageArt.Wall(shell, 4, 3, VillageArt.Side.Right, brick, brickWin, brick);
+            VillageArt.Corners(shell, 4, 3, "Corner_Exterior_Brick");
+            VillageArt.Roof(shell, 4, 3, ridgeAlongX: true);
+            // Counter: a row of crates across the open front.
+            for (int i = 0; i < 4; i++)
+                VillageArt.Piece("Prop_Crate", shop, new Vector3(1.6f, 0.06f, -1.62f + i * 1.08f), i * 7f);
+            VillageArt.Piece("Prop_Crate", shop, new Vector3(3.6f, 0f, 3.4f), 20f);
+            VillageArt.Piece("Prop_Crate", shop, new Vector3(3.6f, 1.06f, 3.4f), 50f, scale: 0.7f);
+            VillageArt.Piece("Prop_Chimney", shop, new Vector3(-2.2f, 4.2f, -2.4f), 0f, solid: false);
 
             // Gunsmith behind the counter
             var smith = new GameObject("Gunsmith").transform;
             smith.SetParent(shop, false);
-            smith.localPosition = new Vector3(0.9f, 0.2f, 3.1f); // off to one side so the rack stays visible
+            smith.localPosition = new Vector3(0.9f, 0.06f, 3.0f); // off to one side so the rack stays visible
             smith.localRotation = Quaternion.LookRotation(Vector3.right);
             Npc(smith, "outfit_knight", "head_knight", "cowboy", "scarf", 9);
             smith.gameObject.AddComponent<GunShop>();
@@ -597,7 +644,7 @@ namespace FriendSlop.EditorTools
             // Display wall
             var rack = new GameObject("WeaponRack");
             rack.transform.SetParent(shop, false);
-            rack.transform.localPosition = new Vector3(-2.75f, 1.0f, 0f);
+            rack.transform.localPosition = new Vector3(-2.5f, 1.0f, 0f);
             rack.transform.localRotation = Quaternion.LookRotation(Vector3.right); // faces customers
             var r = rack.AddComponent<WeaponRack>();
             var rso = new SerializedObject(r);
@@ -607,16 +654,16 @@ namespace FriendSlop.EditorTools
             so.FindProperty("catalog").objectReferenceValue = catalog;
             so.ApplyModifiedPropertiesWithoutUndo();
 
-            // Sign over the entrance, readable from camp
+            // Sign hanging out front, readable from camp
             var sign = new GameObject("Sign");
             sign.transform.SetParent(shop, false);
-            sign.transform.localPosition = new Vector3(3.1f, 4.35f, 0f); // above the roof edge (text is depth-tested now)
+            sign.transform.localPosition = new Vector3(4.3f, 3.2f, 0f);
             sign.transform.rotation = Quaternion.LookRotation(Vector3.left);
             var text = sign.AddComponent<TextMesh>();
             text.text = "GUN SHOP";
             text.anchor = TextAnchor.MiddleCenter;
             text.alignment = TextAlignment.Center;
-            text.characterSize = 0.16f;
+            text.characterSize = 0.12f;
             text.fontSize = 64;
             text.color = new Color(1f, 0.85f, 0.4f);
             var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -639,6 +686,7 @@ namespace FriendSlop.EditorTools
         }
 
         static bool NearCabin(Vector3 p) => (new Vector3(p.x, 0f, p.z) - CabinPos).magnitude < 9f;
+        static bool NearLodge(Vector3 p) => (new Vector3(p.x, 0f, p.z) - LodgePos).magnitude < 10f;
 
         static bool NearTotem(Vector3 p) => (new Vector3(p.x, 0f, p.z) - TotemPos).magnitude < 6f;
 
@@ -671,6 +719,147 @@ namespace FriendSlop.EditorTools
         static Vector3 RandomInMap(System.Random rng, float half) =>
             new Vector3(((float)rng.NextDouble() * 2f - 1f) * half, 0f, ((float)rng.NextDouble() * 2f - 1f) * half);
 
+        // =========================================================== Lucky Lodge (gambling)
+
+        /// <summary>The Lucky Lodge: an open-front gambling shack with slots, roulette and scratchers. Bet carcasses.</summary>
+        static void BuildLuckyLodge(Transform world)
+        {
+            var lodge = new GameObject("LuckyLodge").transform;
+            lodge.SetParent(world, false);
+            lodge.position = LodgePos;
+            lodge.rotation = Quaternion.LookRotation(-new Vector3(LodgePos.x, 0f, LodgePos.z).normalized); // opens toward camp
+
+            // Brick market hall from the village kit: 12 m × 6 m, open front.
+            const string brick = "Wall_UnevenBrick_Straight", win = "Wall_UnevenBrick_Window_Wide_Round";
+            VillageArt.Floor(lodge, 6, 3, "Floor_RedBrick");
+            VillageArt.Wall(lodge, 6, 3, VillageArt.Side.Back, brick, win, brick, brick, win, brick);
+            VillageArt.Wall(lodge, 6, 3, VillageArt.Side.Left, brick, win, brick);
+            VillageArt.Wall(lodge, 6, 3, VillageArt.Side.Right, brick, win, brick);
+            VillageArt.Corners(lodge, 6, 3, "Corner_Exterior_Brick");
+            VillageArt.Roof(lodge, 6, 3, ridgeAlongX: true);
+            VillageArt.Piece("Prop_Chimney", lodge, new Vector3(-4f, 4.4f, -1.6f), 0f, solid: false);
+            VillageArt.Piece("Prop_Wagon", lodge, new Vector3(8.2f, 0f, 1.5f), 70f);
+            for (int i = 0; i < 3; i++) VillageArt.Piece("Prop_Crate", lodge, new Vector3(-7.4f, 0f, 2.6f - i * 1.15f), i * 25f);
+
+            var signGlow = Text3D(lodge, "LUCKY LODGE", new Vector3(0f, 3.35f, 4.3f), 0.11f, new Color(1f, 0.85f, 0.25f));
+            Text3D(lodge, "toss an animal on a pad to bet it", new Vector3(0f, 2.85f, 4.3f), 0.045f, new Color(1f, 0.95f, 0.85f));
+            var lightGo = new GameObject("LodgeLight");
+            lightGo.transform.SetParent(lodge, false);
+            lightGo.transform.localPosition = new Vector3(0f, 2.7f, 0.5f);
+            var light = lightGo.AddComponent<Light>();
+            light.type = LightType.Point; light.color = new Color(1f, 0.6f, 0.9f); light.range = 10f; light.intensity = 1.6f; light.shadows = LightShadows.None;
+            _nightLights.Add(light);
+            signGlow.GetComponent<MeshRenderer>(); // (sign stays readable day and night)
+
+            BuildSlots(lodge, new Vector3(-4.2f, 0.06f, -1.4f), 0);
+            BuildRoulette(lodge, new Vector3(0f, 0.06f, -1.1f), 1);
+            BuildScratchers(lodge, new Vector3(4.2f, 0.06f, -1.4f), 2);
+        }
+
+        static GambleStation Pad(Transform lodge, Vector3 machinePos, int id, GambleGame game, string padMat, out Transform pad)
+        {
+            pad = new GameObject($"Pad_{game}").transform;
+            pad.SetParent(lodge, false);
+            pad.localPosition = machinePos + new Vector3(0f, 0f, 2.2f);
+            var col = pad.gameObject.AddComponent<BoxCollider>();
+            col.isTrigger = true;
+            col.size = new Vector3(1.8f, 1.4f, 1.8f);
+            col.center = new Vector3(0f, 0.7f, 0f);
+            if (padMat != null) Visual(PrimitiveType.Cube, "PadTop", pad, new Vector3(0f, 0.08f, 0f), new Vector3(1.8f, 0.06f, 1.8f), padMat);
+            var station = pad.gameObject.AddComponent<GambleStation>();
+            station.game = game;
+            station.id = id;
+            return station;
+        }
+
+        static void BuildSlots(Transform lodge, Vector3 at, int id)
+        {
+            var m = new GameObject("SlotMachine").transform;
+            m.SetParent(lodge, false);
+            m.localPosition = at;
+            Solid(m, "Cabinet", new Vector3(0f, 1.0f, 0f), new Vector3(1.6f, 2.0f, 0.9f), "Roof");
+            Visual(PrimitiveType.Cube, "Trim", m, new Vector3(0f, 2.05f, 0.05f), new Vector3(1.7f, 0.18f, 1.0f), "SellPad");
+            Visual(PrimitiveType.Cube, "Screen", m, new Vector3(0f, 1.35f, 0.46f), new Vector3(1.35f, 0.55f, 0.04f), "Gun");
+            Visual(PrimitiveType.Cylinder, "Lever", m, new Vector3(0.95f, 1.35f, 0.1f), new Vector3(0.07f, 0.35f, 0.07f), "Stone");
+            Visual(PrimitiveType.Sphere, "Knob", m, new Vector3(0.95f, 1.72f, 0.1f), Vector3.one * 0.18f, "Glow");
+            var station = Pad(lodge, at, id, GambleGame.Slots, "SellPad", out _);
+            station.displays = new[]
+            {
+                Text3D(m, "RABBIT", new Vector3(-0.44f, 1.35f, 0.5f), 0.017f, Color.white),
+                Text3D(m, "DUCK", new Vector3(0f, 1.35f, 0.5f), 0.017f, Color.white),
+                Text3D(m, "GOOSE", new Vector3(0.44f, 1.35f, 0.5f), 0.017f, Color.white),
+            };
+            station.status = Text3D(m, "SLOTS", new Vector3(0f, 2.55f, 0.3f), 0.09f, new Color(1f, 0.85f, 0.3f));
+        }
+
+        static void BuildRoulette(Transform lodge, Vector3 at, int id)
+        {
+            var m = new GameObject("Roulette").transform;
+            m.SetParent(lodge, false);
+            m.localPosition = at;
+            Solid(m, "Table", new Vector3(0f, 0.45f, 0f), new Vector3(2.4f, 0.9f, 1.6f), "Plank");
+            Visual(PrimitiveType.Cube, "Felt", m, new Vector3(0f, 0.91f, 0f), new Vector3(2.3f, 0.02f, 1.5f), "Leaves");
+            var wheel = new GameObject("Wheel").transform;
+            wheel.SetParent(m, false);
+            wheel.localPosition = new Vector3(0f, 0.95f, 0f);
+            Visual(PrimitiveType.Cylinder, "Rim", wheel, Vector3.zero, new Vector3(1.25f, 0.04f, 1.25f), "Bark");
+            for (int i = 0; i < 12; i++)
+            {
+                float a = i * 30f;
+                var wedge = Visual(PrimitiveType.Cube, "Wedge", wheel, Quaternion.Euler(0f, a, 0f) * new Vector3(0f, 0.04f, 0.38f), new Vector3(0.18f, 0.03f, 0.42f), i == 0 ? "Leaves" : i % 2 == 0 ? "Roof" : "Gun");
+                wedge.transform.localRotation = Quaternion.Euler(0f, a, 0f);
+            }
+            Visual(PrimitiveType.Sphere, "Hub", wheel, new Vector3(0f, 0.08f, 0f), Vector3.one * 0.2f, "SellPad");
+            var station = Pad(lodge, at + new Vector3(0f, 0f, 0.2f), id, GambleGame.Roulette, null, out var pad);
+            // Bet by where the carcass lands: RED half (your left), BLACK half (your right), green bullseye.
+            Visual(PrimitiveType.Cube, "Red", pad, new Vector3(0.45f, 0.08f, 0f), new Vector3(0.9f, 0.06f, 1.8f), "Roof");
+            Visual(PrimitiveType.Cube, "Black", pad, new Vector3(-0.45f, 0.08f, 0f), new Vector3(0.9f, 0.06f, 1.8f), "Gun");
+            Visual(PrimitiveType.Cylinder, "Green", pad, new Vector3(0f, 0.1f, 0f), new Vector3(0.9f, 0.03f, 0.9f), "Leaves");
+            Text3D(pad, "RED", new Vector3(0.5f, 0.2f, -0.75f), 0.05f, Color.white);
+            Text3D(pad, "BLACK", new Vector3(-0.5f, 0.2f, -0.75f), 0.05f, Color.white);
+            station.wheel = wheel;
+            station.displays = new[] { Text3D(m, "PLACE YOUR BETS", new Vector3(0f, 1.7f, 0f), 0.06f, Color.white) };
+            station.status = Text3D(m, "ROULETTE", new Vector3(0f, 2.3f, 0f), 0.09f, new Color(1f, 0.85f, 0.3f));
+        }
+
+        static void BuildScratchers(Transform lodge, Vector3 at, int id)
+        {
+            var m = new GameObject("Scratchers").transform;
+            m.SetParent(lodge, false);
+            m.localPosition = at;
+            Solid(m, "Booth", new Vector3(0f, 0.55f, 0f), new Vector3(1.8f, 1.1f, 0.8f), "Trader");
+            Visual(PrimitiveType.Cube, "Board", m, new Vector3(0f, 1.75f, -0.2f), new Vector3(1.9f, 1.0f, 0.08f), "Plank");
+            var station = Pad(lodge, at, id, GambleGame.Scratchers, "Trader", out _);
+            var panels = new TextMesh[3];
+            for (int i = 0; i < 3; i++)
+            {
+                Visual(PrimitiveType.Cube, "Panel", m, new Vector3(-0.6f + i * 0.6f, 1.75f, -0.15f), new Vector3(0.5f, 0.5f, 0.03f), "Stone");
+                panels[i] = Text3D(m, "?", new Vector3(-0.6f + i * 0.6f, 1.75f, -0.12f), 0.022f, Color.gray);
+            }
+            station.displays = panels;
+            station.status = Text3D(m, "SCRATCHERS", new Vector3(-0.35f, 2.55f, -0.2f), 0.06f, new Color(1f, 0.85f, 0.3f));
+        }
+
+        /// <summary>Depth-tested world text facing out of the parent's front (+Z), readable by someone standing in front.</summary>
+        static TextMesh Text3D(Transform parent, string text, Vector3 localPos, float size, Color color)
+        {
+            var go = new GameObject($"Text_{text}");
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPos;
+            go.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+            var tm = go.AddComponent<TextMesh>();
+            tm.text = text;
+            tm.anchor = TextAnchor.MiddleCenter;
+            tm.alignment = TextAlignment.Center;
+            tm.characterSize = size;
+            tm.fontSize = 64;
+            tm.color = color;
+            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (font != null) { tm.font = font; go.GetComponent<MeshRenderer>().sharedMaterial = font.material; }
+            AddWorldText(go);
+            return tm;
+        }
+
         // =========================================================== Cabin & campfire
 
         /// <summary>A log cabin north of camp with four beds and a lantern. Sleep here to skip the night.</summary>
@@ -681,50 +870,30 @@ namespace FriendSlop.EditorTools
             cabin.position = CabinPos;
             cabin.rotation = Quaternion.LookRotation(-CabinPos.normalized); // door faces camp
 
-            const float W = 8f, D = 6f, H = 2.8f, T = 0.22f;
-            Solid(cabin, "Floor", new Vector3(0f, 0.05f, 0f), new Vector3(W, 0.1f, D), "Plank");
-            Solid(cabin, "Back", new Vector3(0f, H / 2f, -D / 2f), new Vector3(W, H, T), "Bark");
-            Solid(cabin, "Left", new Vector3(-W / 2f, H / 2f, 0f), new Vector3(T, H, D), "Bark");
-            Solid(cabin, "Right", new Vector3(W / 2f, H / 2f, 0f), new Vector3(T, H, D), "Bark");
-            const float door = 1.6f;
-            float side = (W - door) / 2f;
-            Solid(cabin, "FrontL", new Vector3(-(door / 2f + side / 2f), H / 2f, D / 2f), new Vector3(side, H, T), "Bark");
-            Solid(cabin, "FrontR", new Vector3(door / 2f + side / 2f, H / 2f, D / 2f), new Vector3(side, H, T), "Bark");
-            Solid(cabin, "Lintel", new Vector3(0f, H - 0.3f, D / 2f), new Vector3(door, 0.6f, T), "Bark");
-            // Log stripes so the walls read as a log cabin.
-            for (int i = 1; i < 6; i++)
-            {
-                float y = i * H / 6f;
-                Visual(PrimitiveType.Cube, "Log", cabin, new Vector3(0f, y, -D / 2f - 0.12f), new Vector3(W + 0.3f, 0.06f, 0.06f), "Plank");
-                Visual(PrimitiveType.Cube, "Log", cabin, new Vector3(-W / 2f - 0.12f, y, 0f), new Vector3(0.06f, 0.06f, D + 0.3f), "Plank");
-                Visual(PrimitiveType.Cube, "Log", cabin, new Vector3(W / 2f + 0.12f, y, 0f), new Vector3(0.06f, 0.06f, D + 0.3f), "Plank");
-            }
-            // Gable roof
-            float half = W / 2f + 0.5f;
-            float slope = Mathf.Atan2(1.4f, half) * Mathf.Rad2Deg;
-            float len = Mathf.Sqrt(half * half + 1.4f * 1.4f);
-            for (int s = -1; s <= 1; s += 2)
-            {
-                var roof = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                roof.name = "Roof";
-                roof.transform.SetParent(cabin, false);
-                roof.transform.localPosition = new Vector3(s * half / 2f, H + 0.7f, 0f);
-                roof.transform.localRotation = Quaternion.Euler(0f, 0f, -s * slope);
-                roof.transform.localScale = new Vector3(len, 0.15f, D + 1f);
-                roof.GetComponent<Renderer>().sharedMaterial = Mats["Roof"];
-                roof.isStatic = true;
-            }
-            for (int s = -1; s <= 1; s += 2) // gable ends (a squat block under each roof edge)
-                Visual(PrimitiveType.Cube, "Gable", cabin, new Vector3(0f, H + 0.55f, s * (D / 2f)), new Vector3(W * 0.62f, 1.1f, T), "Bark");
+            // Half-timbered cottage from the village kit: 8 m × 6 m, door on the camp side.
+            const string grid = "Wall_Plaster_WoodGrid", win = "Wall_Plaster_Window_Wide_Round", plain = "Wall_Plaster_Straight";
+            VillageArt.Floor(cabin, 4, 3, "Floor_WoodDark");
+            VillageArt.Wall(cabin, 4, 3, VillageArt.Side.Front, win, "Wall_Plaster_Door_Round", grid, win);
+            VillageArt.Wall(cabin, 4, 3, VillageArt.Side.Back, grid, grid, grid, grid);
+            VillageArt.Wall(cabin, 4, 3, VillageArt.Side.Left, plain, win, plain);
+            VillageArt.Wall(cabin, 4, 3, VillageArt.Side.Right, plain, win, plain);
+            VillageArt.Corners(cabin, 4, 3);
+            VillageArt.Roof(cabin, 4, 3, ridgeAlongX: true);
+            VillageArt.Piece("Prop_Chimney", cabin, new Vector3(2.4f, 4.3f, -1.4f), 0f, solid: false);
+            VillageArt.Piece("Door_1_Round", cabin, new Vector3(-0.45f, 0.06f, 3.2f), -100f, solid: false); // swung open
+            VillageArt.Piece("Prop_Crate", cabin, new Vector3(-4.8f, 0f, 2.2f), 15f);
+            VillageArt.Piece("Prop_WoodenFence_Single", cabin, new Vector3(2.6f, 0f, 4.4f), 0f);
+            VillageArt.Piece("Prop_WoodenFence_Single", cabin, new Vector3(4.65f, 0f, 4.4f), 0f);
 
             // Beds along the back wall
+            const float D = 6f;
             float[] xs = { -2.7f, -0.9f, 0.9f, 2.7f };
             var blankets = new[] { new Color(0.75f, 0.2f, 0.2f), new Color(0.2f, 0.45f, 0.75f), new Color(0.3f, 0.6f, 0.3f), new Color(0.85f, 0.65f, 0.2f) };
             for (int i = 0; i < xs.Length; i++)
             {
                 var bed = new GameObject($"Bed{i}");
                 bed.transform.SetParent(cabin, false);
-                bed.transform.localPosition = new Vector3(xs[i], 0f, -D / 2f + 1.15f);
+                bed.transform.localPosition = new Vector3(xs[i], 0.06f, -D / 2f + 1.45f);
                 var col = bed.AddComponent<BoxCollider>();
                 col.size = new Vector3(1.1f, 0.6f, 2.0f);
                 col.center = new Vector3(0f, 0.3f, 0f);
@@ -748,7 +917,7 @@ namespace FriendSlop.EditorTools
             // Lantern hanging from the ridge
             var lanternGo = new GameObject("Lantern");
             lanternGo.transform.SetParent(cabin, false);
-            lanternGo.transform.localPosition = new Vector3(0f, H - 0.2f, 0.2f);
+            lanternGo.transform.localPosition = new Vector3(0f, 2.75f, 0.2f);
             Visual(PrimitiveType.Cube, "LanternBody", lanternGo.transform, Vector3.zero, new Vector3(0.18f, 0.25f, 0.18f), "Glow");
             var lantern = lanternGo.AddComponent<Light>();
             lantern.type = LightType.Point;

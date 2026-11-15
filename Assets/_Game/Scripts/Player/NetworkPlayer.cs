@@ -87,6 +87,7 @@ namespace FriendSlop.Player
 
         Vector3 _knockback;
         PlayerHealth _health;
+        PlayerUpgrades _upgrades;
         Vector3[] _bodyRestPos;
         Quaternion[] _bodyRestRot;
         Vector3 _pivotRestPos;
@@ -100,6 +101,7 @@ namespace FriendSlop.Player
         {
             _cc = GetComponent<CharacterController>();
             _health = GetComponent<PlayerHealth>();
+            _upgrades = GetComponent<PlayerUpgrades>();
             if (cameraPivot) _pivotRestPos = cameraPivot.localPosition;
         }
 
@@ -356,13 +358,14 @@ namespace FriendSlop.Player
             float speed = controlling && Controls.Held(GameAction.Sprint) ? sprintSpeed : walkSpeed;
             float wade = FriendSlop.World.WaterVolume.DepthAt(transform.position);
             if (wade > 0.2f) speed *= Mathf.Lerp(0.75f, 0.5f, Mathf.InverseLerp(0.2f, 1.2f, wade)); // sloshing through water
+            if (_upgrades) speed *= _upgrades.SpeedMult;
             if (IsCarrying) speed *= CarrySpeedFactor();
             Vector3 horizontal = (transform.right * input.x + transform.forward * input.y) * speed + _knockback;
             _knockback = Vector3.MoveTowards(_knockback, Vector3.zero, 22f * Time.deltaTime);
 
             if (_cc.isGrounded && _verticalVelocity < 0f) _verticalVelocity = -2f;
             if (controlling && _cc.isGrounded && Controls.Pressed(GameAction.Jump))
-                _verticalVelocity = Mathf.Sqrt(jumpHeight * -2f * gravity);
+                _verticalVelocity = Mathf.Sqrt(jumpHeight * (_upgrades ? _upgrades.JumpMult : 1f) * -2f * gravity);
             _verticalVelocity += gravity * Time.deltaTime;
 
             _cc.Move((horizontal + Vector3.up * _verticalVelocity) * Time.deltaTime);
@@ -385,7 +388,10 @@ namespace FriendSlop.Player
         float CarrySpeedFactor()
         {
             if (_held != null && _held.TryGetComponent(out Animal a))
-                return Mathf.Clamp(carrySpeedMultiplier - a.WeightKg.Value / 900f, 0.3f, carrySpeedMultiplier);
+            {
+                float f = Mathf.Clamp(carrySpeedMultiplier - a.WeightKg.Value / 900f, 0.3f, carrySpeedMultiplier);
+                return Mathf.Lerp(f, 1f, 0.4f * (_upgrades ? _upgrades.CarryTier : 0)); // Strong Back
+            }
             return carrySpeedMultiplier;
         }
 
@@ -420,7 +426,7 @@ namespace FriendSlop.Player
                 LocalHint = "E drop · Left click throw · Take it to the trader to sell";
                 if (!controlling) return;
                 if (Controls.Pressed(GameAction.Interact)) Release(_cc.velocity);
-                else if (Controls.Pressed(GameAction.Fire)) Release(_cc.velocity + LookDirection() * throwSpeed);
+                else if (Controls.Pressed(GameAction.Fire)) Release(_cc.velocity + LookDirection() * throwSpeed * (1f + 0.3f * (_upgrades ? _upgrades.CarryTier : 0)));
                 return;
             }
 

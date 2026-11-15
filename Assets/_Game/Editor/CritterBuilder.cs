@@ -76,6 +76,7 @@ namespace FriendSlop.EditorTools
             rig.paintRenderers = _rends.ToArray();
             rig.paintColors = _cols.ToArray();
             rig.paintEmission = _emis.ToArray();
+            rig.glowMaterial = GlowMaterial();
             return r;
         }
 

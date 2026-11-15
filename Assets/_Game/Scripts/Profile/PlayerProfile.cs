@@ -26,6 +26,7 @@ namespace FriendSlop.Profile
         public int jumpShotKills;
         public int longShotKills;
         public int bossKills;
+        public int xp; // hunter experience (levels unlock upgrades)
         public int moneyEarnedWithTeam;
         public List<string> speciesKilled = new List<string>();
         public List<SpeciesCount> killsBySpecies = new List<SpeciesCount>();
@@ -56,6 +57,34 @@ namespace FriendSlop.Profile
 
         /// <summary>Fires when an achievement unlocks: (id, display name).</summary>
         public static event Action<string, string> AchievementUnlocked;
+
+        /// <summary>Fires when you reach a new hunter level (new level).</summary>
+        public static event Action<int> LevelUp;
+
+        /// <summary>Total XP needed to reach a level (Lv1 = 0, Lv2 = 100, Lv3 = 300, Lv4 = 600, ... Lv10 = 4,500).</summary>
+        public static int XpForLevel(int level) => 50 * level * (level - 1);
+        public const int MaxLevel = 30;
+
+        public int Level
+        {
+            get
+            {
+                int l = 1;
+                while (l < MaxLevel && xp >= XpForLevel(l + 1)) l++;
+                return l;
+            }
+        }
+
+        /// <summary>Earn XP; fires <see cref="LevelUp"/> for each level gained. Saves.</summary>
+        public void AddXp(int amount)
+        {
+            if (amount <= 0) return;
+            int before = Level;
+            xp += amount;
+            int after = Level;
+            Save();
+            for (int l = before + 1; l <= after; l++) LevelUp?.Invoke(l);
+        }
 
         public static PlayerProfile Current
         {
@@ -187,6 +216,7 @@ namespace FriendSlop.Profile
             lifetimeBucks += Mathf.Max(1, Mathf.RoundToInt(dollars * BucksPerDollar));
             CheckAchievements();
             Save();
+            AddXp(Mathf.Max(1, dollars / 4)); // selling levels you up too
         }
 
         /// <summary>Unlock any achievement whose condition is now met (and its reward).</summary>

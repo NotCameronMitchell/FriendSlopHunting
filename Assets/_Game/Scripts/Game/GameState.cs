@@ -67,6 +67,14 @@ namespace FriendSlop.Game
             AnnounceRpc($"{who} bought the {def.displayName} for ${def.price:N0}!");
         }
 
+        /// <summary>Server only: spend team money if there's enough.</summary>
+        public bool ServerTrySpend(int amount)
+        {
+            if (!IsServer || Money.Value < amount) return false;
+            Money.Value -= amount;
+            return true;
+        }
+
         /// <summary>Server only: grant money without counting a sale (dev/testing).</summary>
         public void ServerGrantMoney(int amount)
         {
@@ -111,6 +119,18 @@ namespace FriendSlop.Game
             AnimalsSold.Value++;
             AnnounceRpc(announcement);
         }
+
+        /// <summary>Raised on every peer when a Lucky Lodge station resolves a bet: (station, a, b, c, payout).</summary>
+        public static event System.Action<int, int, int, int, int> GambleResult;
+
+        /// <summary>Server: tell everyone how a gamble turned out (they animate it; the station pays out after).</summary>
+        public void ServerGambleResult(int station, int a, int b, int c, int payout)
+        {
+            if (IsServer) GambleResultRpc(station, a, b, c, payout);
+        }
+
+        [Rpc(SendTo.Everyone)]
+        void GambleResultRpc(int station, int a, int b, int c, int payout) => GambleResult?.Invoke(station, a, b, c, payout);
 
         /// <summary>Server only: broadcast a message to every player's HUD.</summary>
         public void ServerAnnounce(string announcement)

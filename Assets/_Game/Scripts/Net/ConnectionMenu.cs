@@ -58,7 +58,7 @@ namespace FriendSlop.Net
             var card = new Rect(Screen.width - w - 30, (Screen.height - h) / 2f, w, h);
             GUI.Box(card, GUIContent.none);
             GUI.Label(new Rect(card.x, card.y + 10, w, 32), p.EffectiveName, _big);
-            GUI.Label(new Rect(card.x, card.y + 42, w, 26), $"{p.bucks:N0} bucks", _bucks);
+            GUI.Label(new Rect(card.x, card.y + 42, w, 26), $"Hunter level {p.Level}  ·  {p.bucks:N0} bucks", _bucks);
             if (preview != null)
                 GUI.DrawTexture(new Rect(card.x + 30, card.y + 72, w - 60, (w - 60) * 1.25f), preview.Render(p.outfit, p.head, p.hat, p.accessory, p.colorIndex), ScaleMode.ScaleToFit);
             if (GUI.Button(new Rect(card.x + 30, card.yMax - 52, w - 60, 38), "Customize"))

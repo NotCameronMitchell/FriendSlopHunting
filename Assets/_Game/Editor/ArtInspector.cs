@@ -30,7 +30,7 @@ namespace FriendSlop.EditorTools
                 var clips = AssetDatabase.LoadAllAssetsAtPath(path).OfType<AnimationClip>().Where(c => !c.name.StartsWith("__preview")).Select(c => $"{c.name}({c.length:0.0}s)").ToArray();
                 var anim = go.GetComponentInChildren<Animator>();
                 var parts = rends.Select(r => r.name + (r is SkinnedMeshRenderer ? "*" : "")).ToArray();
-                sb.AppendLine($"[Art] {System.IO.Path.GetFileNameWithoutExtension(path)} size={b.size.x:0.00}x{b.size.y:0.00}x{b.size.z:0.00} minY={b.min.y:0.00} rends={rends.Length} parts=[{string.Join(",", parts.Take(14))}] mats=[{string.Join(", ", mats)}]" +
+                sb.AppendLine($"[Art] {System.IO.Path.GetFileNameWithoutExtension(path)} size={b.size.x:0.00}x{b.size.y:0.00}x{b.size.z:0.00} min=({b.min.x:0.00},{b.min.y:0.00},{b.min.z:0.00}) max=({b.max.x:0.00},{b.max.y:0.00},{b.max.z:0.00}) rends={rends.Length} parts=[{string.Join(",", parts.Take(14))}] mats=[{string.Join(", ", mats)}]" +
                               (clips.Length > 0 ? $" clips({clips.Length})=[{string.Join(",", clips.Take(80))}]" : "") +
                               (anim ? $" avatar={(anim.avatar ? anim.avatar.name : "none")}" : ""));
             }

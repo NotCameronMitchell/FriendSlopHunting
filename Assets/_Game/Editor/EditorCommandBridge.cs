@@ -103,6 +103,65 @@ namespace FriendSlop.EditorTools
                 }
                 return;
             }
+            if (cmd == "profile-xp")
+            {
+                FriendSlop.Profile.PlayerProfile.Current.AddXp(1200);
+                Debug.Log($"[Bridge] xp → {FriendSlop.Profile.PlayerProfile.Current.xp} level {FriendSlop.Profile.PlayerProfile.Current.Level}");
+                return;
+            }
+            if (cmd.StartsWith("upgrade "))
+            {
+                var up = FriendSlop.Player.PlayerUpgrades.Local;
+                if (up == null || !System.Enum.TryParse(cmd.Substring(8), true, out FriendSlop.Player.UpgradeTrack track)) { Debug.LogWarning("[Bridge] upgrade: in a hunt, upgrade <track>"); return; }
+                up.RequestBuy(track);
+                Debug.Log($"[Bridge] upgrade {track} requested");
+                return;
+            }
+            if (cmd == "selftest-upgrades")
+            {
+                var up = FriendSlop.Player.PlayerUpgrades.Local;
+                var hp = FriendSlop.Player.PlayerHealth.Local;
+                if (up == null) return;
+                var sb = new System.Text.StringBuilder("[Bridge] upgrades →");
+                foreach (FriendSlop.Player.UpgradeTrack t in System.Enum.GetValues(typeof(FriendSlop.Player.UpgradeTrack))) sb.Append($" {t}:{up.Tier(t)}");
+                sb.Append($" speed×{up.SpeedMult:0.00} dmg×{up.DamageMult:0.00} maxHp={hp?.MaxHp} hp={hp?.Health.Value} money=${FriendSlop.Game.GameState.Instance?.Money.Value}");
+                Debug.Log(sb.ToString());
+                return;
+            }
+            if (cmd.StartsWith("gamble "))
+            {
+                // gamble <station 0-2> [red|black|green] : drop a freshly killed deer onto a Lucky Lodge pad.
+                var a2 = cmd.Split(' ');
+                int id = int.Parse(a2[1]);
+                FriendSlop.World.GambleStation st = null;
+                foreach (var s in FriendSlop.World.GambleStation.All) if (s.id == id) st = s;
+                var deerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Game/Prefabs/Animals/Deer.prefab");
+                if (st == null || deerPrefab == null || !Unity.Netcode.NetworkManager.Singleton.IsServer) { Debug.LogWarning("[Bridge] gamble: host + station"); return; }
+                float side = a2.Length > 2 ? (a2[2] == "red" ? 0.5f : a2[2] == "black" ? -0.5f : 0f) : 0f;
+                var at = st.transform.TransformPoint(new Vector3(side, 1.2f, 0f));
+                var go = UnityEngine.Object.Instantiate(deerPrefab, at, st.transform.rotation);
+                go.GetComponent<Unity.Netcode.NetworkObject>().Spawn(true);
+                go.GetComponent<Animal>().ServerApplyHit(99999f, Vector3.down * 0.01f, ShotStyle.None, 0);
+                go.GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
+                go.GetComponent<Rigidbody>().angularVelocity = Vector3.zero;
+                go.transform.position = at;
+                Debug.Log($"[Bridge] gamble → deer on station {id} ({st.game})");
+                return;
+            }
+            if (cmd == "selftest-elite")
+            {
+                var hp = FriendSlop.Player.PlayerHealth.Local;
+                var wolf = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Game/Prefabs/Animals/Boar.prefab");
+                if (hp == null || wolf == null) return;
+                var at = hp.transform.position + hp.transform.forward * 6f;
+                at.y = FriendSlop.World.Ground.HeightAt(at);
+                var go = UnityEngine.Object.Instantiate(wolf, at, Quaternion.LookRotation(-hp.transform.forward));
+                go.GetComponent<Animal>().Elite.Value = true;
+                go.GetComponent<Unity.Netcode.NetworkObject>().Spawn(true);
+                var agent = go.GetComponent<UnityEngine.AI.NavMeshAgent>(); if (agent) agent.enabled = false;
+                Debug.Log($"[Bridge] elite → {go.GetComponent<Animal>().DisplayName}");
+                return;
+            }
             if (cmd == "selftest-haunt") { FriendSlop.Game.NightEvents.Instance?.ServerDebugHaunt(); Debug.Log("[Bridge] haunting queued"); return; }
             if (cmd == "selftest-stag") { FriendSlop.Game.NightEvents.Instance?.ServerDebugStag(); Debug.Log("[Bridge] shadow stag spawned"); return; }
             if (cmd == "selftest-sleep")
@@ -479,7 +538,7 @@ namespace FriendSlop.EditorTools
                     break;
                 }
                 case "art-dump":
-                    ArtInspector.Dump("Assets/_Game/ThirdParty");
+                    ArtInspector.Dump("Assets/_Game/ThirdParty/QuaterniusVillage");
                     ArtInspector.Bones("Assets/_Game/ThirdParty/KayKitAdventurers/Characters/Knight.fbx");
                     break;
                 case "refresh":

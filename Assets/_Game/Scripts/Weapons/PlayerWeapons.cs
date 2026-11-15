@@ -47,6 +47,7 @@ namespace FriendSlop.Weapons
         NetworkPlayer _player;
 
         FriendSlop.Player.PlayerHealth _health;
+        FriendSlop.Player.PlayerUpgrades _upgrades;
         Transform _model;
         Transform _muzzle;
         Vector3 _holderRest;
@@ -65,6 +66,7 @@ namespace FriendSlop.Weapons
         {
             _player = GetComponent<NetworkPlayer>();
             _health = GetComponent<FriendSlop.Player.PlayerHealth>();
+            _upgrades = GetComponent<FriendSlop.Player.PlayerUpgrades>();
             if (gunHolder) _holderRest = gunHolder.localPosition;
         }
 
@@ -136,7 +138,7 @@ namespace FriendSlop.Weapons
 
             if (trigger && Time.time >= _nextFire)
             {
-                _nextFire = Time.time + def.fireInterval;
+                _nextFire = Time.time + def.fireInterval * (_upgrades ? _upgrades.FireIntervalMult : 1f);
                 Fire(def, aiming);
             }
         }
@@ -409,7 +411,7 @@ namespace FriendSlop.Weapons
             if (distance >= LongShotDistance) style |= ShotStyle.LongShot;
             if (airborne) style |= ShotStyle.JumpShot;
 
-            float damage = head ? def.damage * def.headshotMultiplier : def.damage;
+            float damage = (head ? def.damage * def.headshotMultiplier : def.damage) * (_upgrades ? _upgrades.DamageMult : 1f);
             animal.ServerApplyHit(damage, (point - origin).normalized, style, OwnerClientId);
         }
 
@@ -424,7 +426,7 @@ namespace FriendSlop.Weapons
             if (!target.TryGet(out NetworkObject obj) || !obj.TryGetComponent(out FriendSlop.Player.PlayerHealth victim) || obj.OwnerClientId == OwnerClientId) return;
             if ((obj.transform.position + Vector3.up - point).sqrMagnitude > 3f * 3f) return;
             bool head = point.y - obj.transform.position.y > 1.45f;
-            float damage = def.damage * FriendSlop.Game.LobbySettings.PlayerDamageScale * (head ? 1.5f : 1f);
+            float damage = def.damage * (_upgrades ? _upgrades.DamageMult : 1f) * FriendSlop.Game.LobbySettings.PlayerDamageScale * (head ? 1.5f : 1f);
             victim.ServerDamage(damage, (point - origin).normalized * 3f, $"{def.displayName} (thanks, {FriendSlop.Game.GameState.PlayerName(OwnerClientId)})");
         }
 
@@ -476,10 +478,10 @@ namespace FriendSlop.Weapons
 
         // ============================================================ Helpers
 
-        static List<Vector3> PelletDirections(WeaponDefinition def, Vector3 forward, bool aiming, int seed)
+        List<Vector3> PelletDirections(WeaponDefinition def, Vector3 forward, bool aiming, int seed)
         {
             var rng = new System.Random(seed);
-            float cone = aiming ? def.aimSpread : def.spread;
+            float cone = (aiming ? def.aimSpread : def.spread) * (_upgrades ? _upgrades.SpreadMult : 1f);
             Vector3 right = Vector3.Cross(Vector3.up, forward);
             if (right.sqrMagnitude < 0.001f) right = Vector3.right;
             right.Normalize();

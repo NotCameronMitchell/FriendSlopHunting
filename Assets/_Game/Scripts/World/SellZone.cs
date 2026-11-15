@@ -28,7 +28,7 @@ namespace FriendSlop.World
 
             int value = animal.SaleValue;
             string style = animal.StyleDescription;
-            string line = $"SOLD {animal.Species.displayName} ({animal.WeightKg.Value:0.0} kg) +${value}";
+            string line = $"SOLD {animal.DisplayName} ({animal.WeightKg.Value:0.0} kg) +${value}";
             if (!string.IsNullOrEmpty(style)) line += $"  [{style}]";
 
             GameState.Instance?.ServerAddMoney(value, line);

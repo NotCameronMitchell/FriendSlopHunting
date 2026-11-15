@@ -47,6 +47,8 @@ namespace FriendSlop.Animals
         public Renderer[] paintRenderers = System.Array.Empty<Renderer>();
         public Color[] paintColors = System.Array.Empty<Color>();
         public Color[] paintEmission = System.Array.Empty<Color>();
+        [Tooltip("Emissive material swapped onto the pupils of elite (Alpha/Golden) animals.")]
+        public Material glowMaterial;
 
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         static readonly int ColorId = Shader.PropertyToID("_Color");
@@ -129,6 +131,24 @@ namespace FriendSlop.Animals
         }
 
         // ------------------------------------------------------------------ hooks from Animal
+
+        /// <summary>Elite look: burning golden eyes (the body is scaled up by <see cref="Animal"/>).</summary>
+        public void SetElite()
+        {
+            var block = new MaterialPropertyBlock();
+            foreach (var p in pupils)
+            {
+                if (!p) continue;
+                var r = p.GetComponent<Renderer>();
+                if (!r) continue;
+                if (glowMaterial && r.sharedMaterial != glowMaterial && r.sharedMaterial.renderQueue < 3000) r.sharedMaterial = glowMaterial;
+                r.GetPropertyBlock(block);
+                block.SetColor(BaseColorId, new Color(1f, 0.8f, 0.2f));
+                block.SetColor(ColorId, new Color(1f, 0.8f, 0.2f));
+                block.SetColor(EmissionId, new Color(2.4f, 1.6f, 0.2f));
+                r.SetPropertyBlock(block);
+            }
+        }
 
         /// <summary>Open the mouth for a bit (called when the animal makes a sound).</summary>
         public void Say(float seconds, float amount = 1f)

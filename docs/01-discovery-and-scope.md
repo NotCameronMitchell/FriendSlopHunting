@@ -157,8 +157,8 @@ Cameron's MVP priorities, in the agreed build order (**gameplay → mobs → men
 | **M3a** | **Terrain & big map** | 300 m mountaintop valley ringed by peaks (the border), hills, lake + pond, two streams, painted ground, procedural sky; difficulty rings spread over the bigger map. | ✅ first pass |
 | **M3b** | **Friendly fire toggle** | Host chooses per lobby whether players can shoot each other. | ✅ done |
 | **M3c** | **Day / night** | Day–night cycle, spooky nights, a cabin with beds to sleep through the night. Night critters (raccoons, opossums, coyotes); ghost goose nights after every 50 geese; the rare Shadow Stag. | ✅ first pass |
-| **M3d** | **Progression** | Hunter levels, weapon/character upgrades, harder mobs further out (difficulty rings). | next |
-| **M3e** | **Gambling shack** | Roulette, slots and scratchers, paid with animals. | |
+| **M3d** | **Progression** | Hunter levels, weapon/character upgrades, harder mobs further out (difficulty rings). | ✅ first pass (levels, 7 upgrade tracks, Alpha/Golden elites) |
+| **M3e** | **Gambling shack** | Roulette, slots and scratchers, paid with animals. | ✅ first pass (Lucky Lodge) |
 | **M3f** | **Proximity voice** | Voice chat that fades with distance (uses the existing push-to-talk/mute settings). | |
 | **M3g** | **Drivable tank** | The goofy vehicle from the weapon list. | |
 | **Later** | Old M4–M5 | Save/load between sessions, a finale. Plus `docs/ideas.md`. | later |

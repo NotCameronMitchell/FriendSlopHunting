@@ -18,6 +18,8 @@ namespace FriendSlop.Weapons
             var damaged = new HashSet<Animal>();
             var pushed = new HashSet<Rigidbody>();
             var shoved = new HashSet<FriendSlop.Player.PlayerHealth>();
+            var up = FriendSlop.Player.PlayerUpgrades.Of(shooterId);
+            float dmgMult = up != null ? up.DamageMult : 1f;
 
             for (int i = 0; i < n; i++)
             {
@@ -28,7 +30,7 @@ namespace FriendSlop.Weapons
                     float dist = Vector3.Distance(center, animal.transform.position);
                     float falloff = Mathf.Clamp01(1f - dist / def.explosionRadius);
                     Vector3 dir = (animal.transform.position - center + Vector3.up * 0.5f).normalized;
-                    animal.ServerApplyHit(def.explosionDamage * (0.35f + 0.65f * falloff), dir, ShotStyle.None, shooterId);
+                    animal.ServerApplyHit(def.explosionDamage * dmgMult * (0.35f + 0.65f * falloff), dir, ShotStyle.None, shooterId);
                     continue;
                 }
 

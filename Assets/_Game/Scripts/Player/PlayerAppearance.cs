@@ -136,6 +136,11 @@ namespace FriendSlop.Player
 
         void LateUpdate()
         {
+            if (_nameTag && TryGetComponent(out PlayerProgress progress))
+            {
+                string want = $"{DisplayName.Value}  Lv{progress.Level.Value}";
+                if (_nameTag.text != want) _nameTag.text = want;
+            }
             if (_nameTag == null) return;
             var cam = NetworkPlayer.LocalCamera;
             if (cam == null) return;

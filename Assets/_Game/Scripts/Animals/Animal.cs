@@ -44,6 +44,13 @@ namespace FriendSlop.Animals
         public readonly NetworkVariable<bool> IsAngry = new NetworkVariable<bool>(false);
         /// <summary>Opossum trick: lying "dead" for a few seconds (shows the dead face, then bolts).</summary>
         public readonly NetworkVariable<bool> PlayingDead = new NetworkVariable<bool>(false);
+        /// <summary>An "Alpha" (fighters) or "Golden" (prey) elite: bigger, tougher, worth much more. Set by the spawner.</summary>
+        public readonly NetworkVariable<bool> Elite = new NetworkVariable<bool>(false);
+
+        public const float EliteScale = 1.3f, EliteHealth = 2.2f, EliteDamage = 1.5f, EliteValue = 2.5f;
+
+        /// <summary>Name for toasts: "Alpha Wolf", "Golden Rabbit", or just "Wolf".</summary>
+        public string DisplayName => species == null ? "" : Elite.Value ? $"{(species.Fights ? "Alpha" : "Golden")} {species.displayName}" : species.displayName;
 
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         static readonly int ColorId = Shader.PropertyToID("_Color");
@@ -83,7 +90,7 @@ namespace FriendSlop.Animals
             {
                 if (species == null) return 0;
                 float weightFactor = WeightKg.Value / Mathf.Max(0.01f, species.AverageWeight);
-                float value = species.basePrice * weightFactor * StylePricing.Multiplier((ShotStyle)KillStyle.Value, Juggles.Value);
+                float value = species.basePrice * weightFactor * StylePricing.Multiplier((ShotStyle)KillStyle.Value, Juggles.Value) * (Elite.Value ? EliteValue : 1f);
                 return Mathf.Max(1, Mathf.RoundToInt(value));
             }
         }
@@ -114,7 +121,7 @@ namespace FriendSlop.Animals
 
             if (IsServer)
             {
-                _health = species.maxHealth;
+                _health = species.maxHealth * (Elite.Value ? EliteHealth : 1f);
                 _home = transform.position;
                 _nextVoice = Time.time + Random.Range(3f, 12f);
                 if (WeightKg.Value <= 0f)
@@ -126,6 +133,11 @@ namespace FriendSlop.Animals
                     _agent.speed = species.wanderSpeed;
                     _agent.Warp(transform.position);
                 }
+            }
+            if (Elite.Value)
+            {
+                transform.localScale = Vector3.one * EliteScale; // scale isn't synced; every peer applies it from the flag
+                if (_rig) _rig.SetElite();
             }
             ApplyDeadVisuals(IsDead.Value);
         }
@@ -321,7 +333,7 @@ namespace FriendSlop.Animals
                 _nextAttack = Time.time + species.attackCooldown;
                 Vector3 dir = dist > 0.01f ? flat / dist : transform.forward;
                 Vector3 knock = dir * species.knockback + Vector3.up * species.knockback * 0.45f;
-                _target.ServerDamage(species.attackDamage, knock, species.isBoss ? species.bossTitle : species.displayName);
+                _target.ServerDamage(species.attackDamage * (Elite.Value ? EliteDamage : 1f), knock, species.isBoss ? species.bossTitle : DisplayName);
                 AttackRpc();
             }
         }
@@ -444,7 +456,7 @@ namespace FriendSlop.Animals
             }
 
             _health -= damage;
-            HealthFraction.Value = Mathf.Clamp01(_health / species.maxHealth);
+            HealthFraction.Value = Mathf.Clamp01(_health / (species.maxHealth * (Elite.Value ? EliteHealth : 1f)));
             if (_health > 0f)
             {
                 if (species.Fights)
@@ -484,7 +496,7 @@ namespace FriendSlop.Animals
             _carry.ServerSetCarryable(true);
 
             PlayingDead.Value = false;
-            PlayerProgress.Of(shooterId)?.ServerCreditKill(species, style); // stats + achievements for the killer
+            PlayerProgress.Of(shooterId)?.ServerCreditKill(species, style, Elite.Value); // stats + achievements for the killer
             string who = GameState.PlayerName(shooterId);
             FriendSlop.Game.NightEvents.Instance?.ServerOnKill(this, shooterId);
             if (species.isBoss)
@@ -503,8 +515,8 @@ namespace FriendSlop.Animals
 
             string styleText = StyleDescription;
             GameState.Instance?.ServerAnnounce(string.IsNullOrEmpty(styleText)
-                ? $"{who} bagged a {species.displayName}!"
-                : $"{who} bagged a {species.displayName}! {styleText}");
+                ? $"{who} bagged {(Elite.Value && species.Fights ? "an" : "a")} {DisplayName}!"
+                : $"{who} bagged {(Elite.Value && species.Fights ? "an" : "a")} {DisplayName}! {styleText}");
         }
 
         void ServerJuggle(Vector3 direction)
@@ -517,7 +529,7 @@ namespace FriendSlop.Animals
             if (airborne && Juggles.Value < StylePricing.MaxJuggles)
             {
                 Juggles.Value++;
-                GameState.Instance?.ServerAnnounce($"JUGGLE ×{Juggles.Value}!  {species.displayName} now worth ${SaleValue}");
+                GameState.Instance?.ServerAnnounce($"JUGGLE ×{Juggles.Value}!  {DisplayName} now worth ${SaleValue}");
             }
 
             // Pop it back up so you can keep it in the air.

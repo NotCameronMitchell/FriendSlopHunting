@@ -15,6 +15,8 @@ namespace FriendSlop.Player
     public class PlayerHealth : NetworkBehaviour
     {
         public const float MaxHealth = 100f;
+        /// <summary>Max health including the Thick Skin upgrade.</summary>
+        public float MaxHp => MaxHealth + (TryGetComponent(out PlayerUpgrades up) ? up.HealthBonus : 0f);
 
         [SerializeField] float respawnSeconds = 5f;
         [SerializeField] float spawnProtectionSeconds = 3f;
@@ -76,7 +78,7 @@ namespace FriendSlop.Player
         {
             if (!IsServer || !IsSpawned || !IsDown.Value || Time.time < _serverRespawnAt) return;
 
-            Health.Value = MaxHealth;
+            Health.Value = MaxHp;
             IsDown.Value = false;
             _protectedUntil = Time.time + spawnProtectionSeconds;
             Vector2 jitter = Random.insideUnitCircle * 1.5f;
@@ -95,6 +97,12 @@ namespace FriendSlop.Player
                 _player.AddRecoil(Mathf.Clamp(amount * 0.4f, 2f, 12f));
             }
             else SfxPlayer.PlayAt(Sfx.Thud, position, 0.8f, 0.7f, 2f, 30f);
+        }
+
+        /// <summary>Host: restore some health (capped at max).</summary>
+        public void ServerHeal(float amount)
+        {
+            if (IsServer && !IsDown.Value) Health.Value = Mathf.Min(MaxHp, Health.Value + amount);
         }
 
         /// <summary>Host: push a player without hurting them (explosion blasts, rocket jumps).</summary>

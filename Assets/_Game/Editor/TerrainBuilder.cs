@@ -17,7 +17,7 @@ namespace FriendSlop.EditorTools
     public static class TerrainBuilder
     {
         public const float Half = 150f;
-        const float BaseY = -6f, Height = 64f;
+        const float BaseY = -6f, Height = 84f;
         const int Res = 513, SplatRes = 512;
         const string Dir = "Assets/_Game/Data/Terrain";
         const string TexDir = "Assets/_Game/Materials/Ground";
@@ -84,7 +84,14 @@ namespace FriendSlop.EditorTools
             if (!AssetDatabase.IsValidFolder(Dir)) AssetDatabase.CreateFolder("Assets/_Game/Data", "Terrain");
             if (!AssetDatabase.IsValidFolder(TexDir)) AssetDatabase.CreateFolder("Assets/_Game/Materials", "Ground");
 
+            // Order matters: (1) make the layer textures (importing assets can reload a fresh terrain asset
+            // from disk and wipe unsaved heights), (2) create the asset, (3) set heights and paint, (4) save.
+            // Paint set before CreateAsset isn't saved at all (the whole map came out grass).
+            var layers = Layers();
+            string path = $"{Dir}/HuntTerrain.asset";
+            if (AssetDatabase.LoadAssetAtPath<TerrainData>(path) != null) AssetDatabase.DeleteAsset(path);
             var td = new TerrainData { heightmapResolution = Res, size = new Vector3(Half * 2f, Height, Half * 2f) };
+            AssetDatabase.CreateAsset(td, path);
             var heights = new float[Res, Res];
             for (int iz = 0; iz < Res; iz++)
                 for (int ix = 0; ix < Res; ix++)
@@ -95,13 +102,11 @@ namespace FriendSlop.EditorTools
                 }
             td.SetHeights(0, 0, heights);
 
-            td.terrainLayers = Layers();
+            td.terrainLayers = layers;
             td.alphamapResolution = SplatRes;
             td.SetAlphamaps(0, 0, Splat(td));
-
-            string path = $"{Dir}/HuntTerrain.asset";
-            if (AssetDatabase.LoadAssetAtPath<TerrainData>(path) != null) AssetDatabase.DeleteAsset(path);
-            AssetDatabase.CreateAsset(td, path);
+            EditorUtility.SetDirty(td);
+            AssetDatabase.SaveAssets();
 
             var go = Terrain.CreateTerrainGameObject(td);
             go.name = "Terrain";
@@ -148,7 +153,9 @@ namespace FriendSlop.EditorTools
             float e = Mathf.Max(Mathf.Abs(x), Mathf.Abs(z)) / Half + (P(x / 40f + 3f, z / 40f + 5f) - 0.5f) * 0.08f;
             float m = Smooth(0.76f, 0.98f, e);
             float ridge = 1f - Mathf.Abs(P(x / 25f + 11f, z / 25f + 13f) * 2f - 1f);
-            h += m * m * (26f + ridge * 20f);
+            float crags = 1f - Mathf.Abs(P(x / 9f + 31f, z / 9f + 17f) * 2f - 1f);   // sharper secondary ridges
+            float gravel = (P(x / 3.5f + 5f, z / 3.5f + 8f) - 0.5f);                 // rocky surface detail
+            h += m * m * (28f + ridge * 24f + crags * crags * 7f + gravel * 1.6f);
 
             // Flat pad for the boss totem.
             h = Mathf.Lerp(0f, h, Smooth(5f, 14f, Vector2.Distance(q, TotemXZ)));
@@ -186,7 +193,7 @@ namespace FriendSlop.EditorTools
 
         static float[,,] Splat(TerrainData td)
         {
-            var map = new float[SplatRes, SplatRes, 5]; // grass, forest floor, dirt, rock, sand
+            var map = new float[SplatRes, SplatRes, 6]; // grass, forest floor, dirt, rock, sand, snow
             for (int iz = 0; iz < SplatRes; iz++)
                 for (int ix = 0; ix < SplatRes; ix++)
                 {
@@ -202,17 +209,21 @@ namespace FriendSlop.EditorTools
                     foreach (var s in Streams) dStream = Mathf.Min(dStream, s.Nearest(q, out _));
                     dWater = Mathf.Min(dWater, dStream - 2.5f);
 
-                    float rock = Mathf.Clamp01(Smooth(26f, 38f, steep) + Smooth(16f, 26f, h));
+                    float rock = Mathf.Clamp01(Smooth(26f, 38f, steep) + Smooth(14f, 22f, h));
                     float sand = (1f - Smooth(2f, 7f, dWater)) * (1f - Smooth(0.6f, 2.4f, h - Ground.WaterY)) + (1f - Smooth(1.5f, 4f, dStream)) * 0.8f;
                     float trail = 1f - Smooth(1.2f, 2.6f, DistToSegment(q, new Vector2(0f, -12f), TotemXZ));
                     float dirt = (1f - Smooth(8f, 17f, r)) * 0.85f + trail + Smooth(0.72f, 0.82f, P(x / 9f + 40f, z / 9f + 40f)) * 0.6f;
                     float forest = Smooth(0.45f, 0.65f, P(x / 18f + 20f, z / 18f + 60f)) * 0.9f * Smooth(16f, 30f, r);
                     float grass = 1f;
 
-                    float keep = 1f - rock;
-                    float[] w = { grass * keep, forest * keep, dirt * keep, rock, Mathf.Clamp01(sand) * keep };
+                    // Snow caps: above a wobbly snowline, sliding off the steepest faces.
+                    float snowline = 27f + (P(x / 30f + 70f, z / 30f + 90f) - 0.5f) * 6f;
+                    float snow = Smooth(snowline, snowline + 5f, h) * (1f - Smooth(52f, 66f, steep) * 0.7f);
+                    rock *= 1f - snow;
+                    float keep = (1f - rock) * (1f - snow);
+                    float[] w = { grass * keep, forest * keep, dirt * keep, rock, Mathf.Clamp01(sand) * keep, snow };
                     float sum = 0f; foreach (var f in w) sum += f;
-                    for (int k = 0; k < 5; k++) map[iz, ix, k] = w[k] / sum;
+                    for (int k = 0; k < 6; k++) map[iz, ix, k] = w[k] / sum;
                 }
             return map;
         }
@@ -233,12 +244,13 @@ namespace FriendSlop.EditorTools
                 Layer("Dirt", new Color(0.47f, 0.36f, 0.24f), new Color(0.55f, 0.43f, 0.3f), new Color(0.38f, 0.28f, 0.18f), 6f, speckle: new Color(0.62f, 0.56f, 0.48f)),
                 Layer("Rock", new Color(0.47f, 0.47f, 0.49f), new Color(0.58f, 0.58f, 0.6f), new Color(0.33f, 0.33f, 0.36f), 10f, cracks: true),
                 Layer("Sand", new Color(0.64f, 0.57f, 0.41f), new Color(0.72f, 0.65f, 0.48f), new Color(0.52f, 0.46f, 0.33f), 6f, speckle: new Color(0.45f, 0.4f, 0.3f)),
+                Layer("Snow", new Color(0.92f, 0.95f, 1f), new Color(1f, 1f, 1f), new Color(0.78f, 0.84f, 0.93f), 9f, speckle: new Color(0.7f, 0.8f, 0.95f)),
             };
         }
 
         static TerrainLayer Layer(string name, Color mid, Color light, Color dark, float tile, Color? speckle = null, bool cracks = false)
         {
-            var tex = SaveTexture($"{TexDir}/{name}.png", GroundTexture(mid, light, dark, speckle, cracks, name.GetHashCode()), false);
+            var tex = SaveTexture($"{TexDir}/{name}.png", GroundTexture(mid, light, dark, speckle, cracks, name.GetHashCode(), name == "Snow" ? 0.14f : name == "Rock" ? 0.06f : 0.03f), false);
             string path = $"{TexDir}/{name}.terrainlayer";
             var layer = AssetDatabase.LoadAssetAtPath<TerrainLayer>(path);
             if (layer == null) { layer = new TerrainLayer(); AssetDatabase.CreateAsset(layer, path); }
@@ -284,7 +296,7 @@ namespace FriendSlop.EditorTools
             return sum / 0.97f;
         }
 
-        static Texture2D GroundTexture(Color mid, Color light, Color dark, Color? speckle, bool cracks, int seed)
+        static Texture2D GroundTexture(Color mid, Color light, Color dark, Color? speckle, bool cracks, int seed, float smoothness)
         {
             const int N = 256;
             var tex = new Texture2D(N, N, TextureFormat.RGBA32, true);
@@ -297,9 +309,16 @@ namespace FriendSlop.EditorTools
                     if (speckle.HasValue && TileNoise(u, v, 64, seed + 99) > 0.82f) c = Color.Lerp(c, speckle.Value, 0.55f);
                     if (cracks)
                     {
+                        // Layered strata bands (wobbly horizontal stripes) plus dark cracks and lichen.
+                        float strata = Mathf.Sin((v * 9f + TileNoise(u, v, 4, seed + 3) * 1.6f) * Mathf.PI * 2f) * 0.5f + 0.5f;
+                        c = Color.Lerp(c, Color.Lerp(dark, light, 0.5f), (strata - 0.5f) * 0.35f);
                         float rn = 1f - Mathf.Abs(TileNoise(u, v, 8, seed + 7) * 2f - 1f);
-                        if (rn > 0.9f) c = Color.Lerp(c, dark * 0.7f, (rn - 0.9f) * 8f);
+                        if (rn > 0.86f) c = Color.Lerp(c, dark * 0.55f, (rn - 0.86f) * 6f);
+                        float rn2 = 1f - Mathf.Abs(TileNoise(u, v, 16, seed + 11) * 2f - 1f);
+                        if (rn2 > 0.93f) c = Color.Lerp(c, dark * 0.65f, (rn2 - 0.93f) * 9f);
+                        if (TileNoise(u, v, 32, seed + 21) > 0.8f) c = Color.Lerp(c, new Color(0.45f, 0.52f, 0.36f), 0.35f); // lichen
                     }
+                    c.a = smoothness; // URP terrain reads smoothness from the diffuse alpha (1 = chrome)
                     tex.SetPixel(x, y, c);
                 }
             tex.Apply();

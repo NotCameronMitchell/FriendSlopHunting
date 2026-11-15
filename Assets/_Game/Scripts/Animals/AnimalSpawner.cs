@@ -103,11 +103,21 @@ namespace FriendSlop.Animals
             return false;
         }
 
+        /// <summary>Harder mobs further out and later on: elites get likelier with distance from camp and with each passing day.</summary>
+        float EliteChance(Vector3 position)
+        {
+            if (_species.isBoss || _species.ghostly || _species.shadowy) return 0f;
+            float dist = Vector3.Distance(new Vector3(position.x, 0f, position.z), new Vector3(transform.position.x, 0f, transform.position.z));
+            int day = FriendSlop.World.DayNightCycle.Instance != null && FriendSlop.World.DayNightCycle.Instance.IsSpawned ? FriendSlop.World.DayNightCycle.Instance.Day : 1;
+            return Mathf.Clamp01((dist - 50f) / 90f) * 0.22f + Mathf.Min(0.15f, (day - 1) * 0.03f);
+        }
+
         Animal Spawn(Vector3 position)
         {
             var go = Instantiate(animalPrefab, position, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f));
-            go.GetComponent<NetworkObject>().Spawn(destroyWithScene: true);
             var animal = go.GetComponent<Animal>();
+            animal.Elite.Value = Random.value < EliteChance(position); // set before spawning so it arrives with the object
+            go.GetComponent<NetworkObject>().Spawn(destroyWithScene: true);
             _spawned.Add(animal);
             return animal;
         }

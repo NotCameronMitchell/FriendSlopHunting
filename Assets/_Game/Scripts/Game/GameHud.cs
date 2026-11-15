@@ -74,6 +74,13 @@ namespace FriendSlop.Game
         {
             GameState.Announced += OnAnnounced;
             FriendSlop.Profile.PlayerProfile.AchievementUnlocked += OnAchievement;
+            FriendSlop.Profile.PlayerProfile.LevelUp += OnLevelUp;
+        }
+
+        void OnLevelUp(int level)
+        {
+            OnAnnounced($"LEVEL UP! Hunter level {level}. Check the gun shop for new upgrades.");
+            FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.HeadshotDing, 0.9f, 1.2f);
         }
 
         void OnAchievement(string id, string name)
@@ -87,6 +94,7 @@ namespace FriendSlop.Game
         {
             GameState.Announced -= OnAnnounced;
             FriendSlop.Profile.PlayerProfile.AchievementUnlocked -= OnAchievement;
+            FriendSlop.Profile.PlayerProfile.LevelUp -= OnLevelUp;
         }
 
         void OnAnnounced(string text)
@@ -238,7 +246,7 @@ namespace FriendSlop.Game
                 }
 
                 // Health bar (bottom left).
-                float frac = hp.Health.Value / FriendSlop.Player.PlayerHealth.MaxHealth;
+                float frac = hp.Health.Value / hp.MaxHp;
                 var bar = new Rect(24, Screen.height - 52, 260, 22);
                 GUI.color = new Color(0f, 0f, 0f, 0.55f);
                 GUI.DrawTexture(bar, _white);
@@ -246,6 +254,19 @@ namespace FriendSlop.Game
                 GUI.DrawTexture(new Rect(bar.x + 2, bar.y + 2, (bar.width - 4) * frac, bar.height - 4), _white);
                 GUI.color = Color.white;
                 GUI.Label(new Rect(bar.x + 8, bar.y, bar.width, bar.height), $"HP {Mathf.CeilToInt(hp.Health.Value)}", _small);
+
+                // Hunter level + XP toward the next one, just above the health bar.
+                var prof = FriendSlop.Profile.PlayerProfile.Current;
+                int lv = prof.Level;
+                int lo = FriendSlop.Profile.PlayerProfile.XpForLevel(lv), hi = FriendSlop.Profile.PlayerProfile.XpForLevel(lv + 1);
+                float xpFrac = hi > lo ? Mathf.Clamp01((prof.xp - lo) / (float)(hi - lo)) : 1f;
+                var xpBar = new Rect(24, Screen.height - 64, 260, 8);
+                GUI.color = new Color(0f, 0f, 0f, 0.55f);
+                GUI.DrawTexture(xpBar, _white);
+                GUI.color = new Color(1f, 0.8f, 0.25f);
+                GUI.DrawTexture(new Rect(xpBar.x + 1, xpBar.y + 1, (xpBar.width - 2) * xpFrac, xpBar.height - 2), _white);
+                GUI.color = Color.white;
+                GUI.Label(new Rect(24, Screen.height - 88, 300, 22), $"Lv {lv}   {prof.xp - lo:N0} / {hi - lo:N0} XP", _small);
 
                 // Mic status (voice chat itself arrives later; the controls already work).
                 string mic = null;
