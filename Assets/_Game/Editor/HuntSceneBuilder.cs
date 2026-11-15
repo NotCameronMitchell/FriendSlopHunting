@@ -25,7 +25,7 @@ namespace FriendSlop.EditorTools
     /// whole setup is reproducible and reviewable in git. Safe to re-run: generated assets are
     /// overwritten. Menu: FriendSlop ▸ Build Hunt Test Scene
     /// </summary>
-    public static class HuntSceneBuilder
+    public static partial class HuntSceneBuilder
     {
         const string Root = "Assets/_Game";
         const string PrefabDir = Root + "/Prefabs";
@@ -41,7 +41,7 @@ namespace FriendSlop.EditorTools
         const float CampClearRadius = 14f;
         static readonly Vector3 SellZonePos = new Vector3(8f, 0f, 0f);
         static readonly Vector3 GunShopPos = new Vector3(-11f, 0f, -1f);
-        static readonly Vector3 TotemPos = new Vector3(0f, 0f, -36f);
+        static readonly Vector3 TotemPos = new Vector3(TerrainBuilder.TotemXZ.x, 0f, TerrainBuilder.TotemXZ.y);
         static readonly Vector3 CabinPos = new Vector3(3f, 0f, 16f);
         static readonly Vector3 CampfirePos = new Vector3(2.5f, 0f, 5.5f);
         static readonly Vector3 LodgePos = new Vector3(-14f, 0f, 14f);
@@ -83,13 +83,16 @@ namespace FriendSlop.EditorTools
             var box = BuildBoxPrefab();
             var animals = AnimalBuilder.BuildAll(name => Mats[name]);
             var spawner = BuildSpawnerPrefab();
-            GameObject bossPrefab = null;
-            foreach (var a in animals) if (a.Species.isBoss) bossPrefab = a.Prefab;
+            GameObject bossPrefab = null, hogPrefab = null;
+            foreach (var a in animals)
+                if (a.Species.isBoss) { if (a.Species.bossTitle.Contains("Hamzilla")) hogPrefab = a.Prefab; else bossPrefab = a.Prefab; }
             var totem = BuildTotemPrefab(bossPrefab);
+            _hogTotemPrefab = BuildTotemPrefab(hogPrefab, "HogTotem", hog: true, cost: 350);
+            _lootCratePrefab = BuildLootCratePrefab();
             var tank = BuildTankPrefab();
             var gameState = BuildGameStatePrefab(catalog, animals, tank);
 
-            var networked = new List<GameObject> { player, box, gameState, spawner, pickup, totem, tank };
+            var networked = new List<GameObject> { player, box, gameState, spawner, pickup, totem, tank, _hogTotemPrefab, _lootCratePrefab };
             foreach (var a in animals) networked.Add(a.Prefab);
             var prefabList = RegisterNetworkPrefabs(networked.ToArray());
 
@@ -125,6 +128,16 @@ namespace FriendSlop.EditorTools
             Mat("TankOlive", lit, new Color(0.36f, 0.42f, 0.22f));
             Mat("TankOliveDark", lit, new Color(0.24f, 0.28f, 0.15f));
             Mat("Glow", unlit, new Color(1f, 0.45f, 0.15f));
+            Mat("FlameYellow", unlit, new Color(1f, 0.78f, 0.22f));
+            Mat("FlameCore", unlit, new Color(1f, 0.96f, 0.72f));
+            Mat("Coal", unlit, new Color(0.85f, 0.22f, 0.06f));
+            Mat("Smoke", lit, new Color(0.5f, 0.5f, 0.53f));
+            Mat("Ash", lit, new Color(0.16f, 0.15f, 0.15f));
+            Mat("Mud", lit, new Color(0.3f, 0.21f, 0.14f));
+            Mat("MudWet", lit, new Color(0.2f, 0.14f, 0.1f));
+            Mat("HogPink", lit, new Color(0.9f, 0.6f, 0.62f));
+            Mat("Canvas", lit, new Color(0.74f, 0.68f, 0.52f));
+            Mat("BedrollRed", lit, new Color(0.62f, 0.2f, 0.18f));
             var worldText = Shader.Find("FriendSlop/WorldText");
             if (worldText != null) Mat("WorldText", worldText, Color.white);
             else Debug.LogWarning("[FriendSlop] WorldText shader missing; signs will draw through walls.");
@@ -248,6 +261,7 @@ namespace FriendSlop.EditorTools
             root.AddComponent<PlayerHealth>();
             root.AddComponent<PlayerProgress>();
             root.AddComponent<PlayerUpgrades>();
+            root.AddComponent<PlayerItems>();
             var look = root.AddComponent<PlayerAppearance>();
             var lso = new SerializedObject(look);
             lso.FindProperty("nameTagMaterial").objectReferenceValue = Mats.TryGetValue("WorldText", out var tagMat) ? tagMat : null;
@@ -340,9 +354,9 @@ namespace FriendSlop.EditorTools
         }
 
         /// <summary>Standing stone with a glowing skull; pay to summon the boss.</summary>
-        static GameObject BuildTotemPrefab(GameObject bossPrefab)
+        static GameObject BuildTotemPrefab(GameObject bossPrefab, string name = "BossTotem", bool hog = false, int cost = 250)
         {
-            var root = new GameObject("BossTotem");
+            var root = new GameObject(name);
             var col = root.AddComponent<BoxCollider>();
             col.size = new Vector3(1.4f, 3.4f, 1.4f);
             col.center = new Vector3(0f, 1.7f, 0f);
@@ -350,8 +364,10 @@ namespace FriendSlop.EditorTools
             var totem = root.AddComponent<BossTotem>();
             var so = new SerializedObject(totem);
             so.FindProperty("bossPrefab").objectReferenceValue = bossPrefab;
+            so.FindProperty("summonCost").intValue = cost;
             so.ApplyModifiedPropertiesWithoutUndo();
 
+            if (hog) { HogTotemVisuals(root.transform); return SavePrefab(root, $"{PrefabDir}/{name}.prefab"); }
             Visual(PrimitiveType.Cube, "Base", root.transform, new Vector3(0f, 0.25f, 0f), new Vector3(2.2f, 0.5f, 2.2f), "Stone");
             Visual(PrimitiveType.Cube, "Pillar", root.transform, new Vector3(0f, 1.8f, 0f), new Vector3(1.1f, 2.8f, 1.1f), "Stone");
             Visual(PrimitiveType.Sphere, "Skull", root.transform, new Vector3(0f, 3.5f, 0f), Vector3.one * 0.9f, "Tail");
@@ -362,7 +378,7 @@ namespace FriendSlop.EditorTools
                 Visual(PrimitiveType.Sphere, "Eye", root.transform, new Vector3(e * 0.18f, 3.55f, 0.4f), Vector3.one * 0.16f, "Glow");
             }
 
-            return SavePrefab(root, $"{PrefabDir}/BossTotem.prefab");
+            return SavePrefab(root, $"{PrefabDir}/{name}.prefab");
         }
 
         static void BuildScene(GameObject playerPrefab, GameObject boxPrefab, GameObject gameStatePrefab,
@@ -389,6 +405,30 @@ namespace FriendSlop.EditorTools
             // Hills, mountain border, lake, pond and streams (camp stays flat at y = 0).
             var terrain = TerrainBuilder.Build(world);
             float GroundY(Vector3 p) => terrain.SampleHeight(p) + terrain.transform.position.y;
+            float FootY(Vector3 p, float r)
+            {
+                float y = GroundY(p);
+                for (int k = 0; k < 8; k++)
+                {
+                    float a = k * Mathf.PI / 4f;
+                    y = Mathf.Min(y, GroundY(p + new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r)));
+                }
+                return y;
+            }
+            void Settle(Transform t, float embedFrac)
+            {
+                var rends = t.GetComponentsInChildren<Renderer>();
+                if (rends.Length == 0) return;
+                var b = rends[0].bounds;
+                for (int k = 1; k < rends.Length; k++) b.Encapsulate(rends[k].bounds);
+                // Lowest ground under the footprint (corners pulled in a bit: round shapes don't fill their box).
+                Vector3 c = b.center, e = b.extents * 0.7f;
+                float g = GroundY(c);
+                g = Mathf.Min(g, GroundY(c + new Vector3(e.x, 0f, e.z)), GroundY(c + new Vector3(-e.x, 0f, e.z)));
+                g = Mathf.Min(g, GroundY(c + new Vector3(e.x, 0f, -e.z)), GroundY(c + new Vector3(-e.x, 0f, -e.z)));
+                float embed = Mathf.Clamp(b.size.y * embedFrac, 0.02f, 0.3f);
+                t.position += Vector3.up * (g - embed - b.min.y);
+            }
             float Steep(Vector3 p) => terrain.terrainData.GetSteepness(
                 Mathf.Clamp01((p.x + MapHalfSize) / (MapHalfSize * 2f)), Mathf.Clamp01((p.z + MapHalfSize) / (MapHalfSize * 2f)));
             bool Wild(Vector3 p, float waterMargin, float maxSteep) =>
@@ -400,8 +440,8 @@ namespace FriendSlop.EditorTools
             for (int i = 0, placed = 0; i < 4000 && placed < 520; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
-                if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || !Wild(p, 3f, 30f)) continue;
-                p.y = GroundY(p);
+                if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || NearLandmark(p, 4f) || !Wild(p, 3f, 30f)) continue;
+                p.y = FootY(p, 0.7f) - 0.08f; // lowest ground around the trunk, so no side floats
                 if (p.y > 22f) continue; // bare peaks
                 NatureArt.Tree(trees, p, rng);
                 placed++;
@@ -412,7 +452,7 @@ namespace FriendSlop.EditorTools
             for (int i = 0, placed = 0; i < 1200 && placed < 130; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
-                if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || (p - SellZonePos).magnitude < 9f || !Wild(p, 1.5f, 45f)) continue;
+                if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || NearLandmark(p, 2f) || (p - SellZonePos).magnitude < 9f || !Wild(p, 1.5f, 45f)) continue;
                 p.y = GroundY(p) - 0.25f;
                 NatureArt.Rock(rocks, p, rng);
                 placed++;
@@ -421,9 +461,13 @@ namespace FriendSlop.EditorTools
             var decor = new GameObject("Decor").transform;
             decor.SetParent(world, false);
             NatureArt.Decor(decor, rng, MapHalfSize - 3f, 1500,
-                p => p.magnitude < CampClearRadius + 1f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || (p - SellZonePos).magnitude < 4f || !Wild(p, 0.8f, 32f),
+                p => p.magnitude < CampClearRadius + 1f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || NearLandmark(p, 0f) || (p - SellZonePos).magnitude < 4f || !Wild(p, 0.8f, 32f),
                 GroundY);
-            NatureArt.Grass(world, MapHalfSize - 1f, new[] { new Vector3(0f, 0f, 7f), new Vector3(GunShopPos.x, GunShopPos.z, 6f), new Vector3(SellZonePos.x, SellZonePos.z, 3.5f), new Vector3(TotemPos.x, TotemPos.z, 2.5f), new Vector3(CabinPos.x, CabinPos.z, 7f), new Vector3(CampfirePos.x, CampfirePos.z, 2.5f), new Vector3(LodgePos.x, LodgePos.z, 8f), new Vector3(GaragePos.x, GaragePos.z, 6f) });
+            // Sit every rock and plant flush: drop each one so its lowest point is at the lowest ground under its footprint.
+            foreach (Transform t in rocks) Settle(t, 0.12f);
+            foreach (Transform t in decor) Settle(t, 0.06f);
+            NatureArt.Grass(world, MapHalfSize - 1f, new[] { new Vector3(0f, 0f, 7f), new Vector3(GunShopPos.x, GunShopPos.z, 6f), new Vector3(SellZonePos.x, SellZonePos.z, 3.5f), new Vector3(TotemPos.x, TotemPos.z, 2.5f), new Vector3(CabinPos.x, CabinPos.z, 7f), new Vector3(CampfirePos.x, CampfirePos.z, 2.5f), new Vector3(LodgePos.x, LodgePos.z, 8f), new Vector3(GaragePos.x, GaragePos.z, 6f), new Vector3(TerrainBuilder.HogWallow.x, TerrainBuilder.HogWallow.z, 10f), new Vector3(TerrainBuilder.RangerTower.x, TerrainBuilder.RangerTower.z, 6f), new Vector3(TerrainBuilder.OldCamp.x, TerrainBuilder.OldCamp.z, 7f) });
+            BuildLandmarks(world, scene, GroundY); // before the navmesh bake so animals path around them
 
             // Invisible walls at the map edge (behind the mountains).
             var bounds = new GameObject("Bounds").transform;
@@ -574,7 +618,7 @@ namespace FriendSlop.EditorTools
 
             // The legendary totem at the north edge of the woods.
             var totem = (GameObject)PrefabUtility.InstantiatePrefab(totemPrefab, scene);
-            totem.transform.SetPositionAndRotation(TotemPos, Quaternion.LookRotation(-TotemPos.normalized));
+            totem.transform.SetPositionAndRotation(new Vector3(TotemPos.x, GroundY(TotemPos), TotemPos.z), Quaternion.LookRotation(-new Vector3(TotemPos.x, 0f, TotemPos.z).normalized));
 
             var netGo = new GameObject("NetworkManager");
             var nm = netGo.AddComponent<NetworkManager>();
@@ -601,6 +645,7 @@ namespace FriendSlop.EditorTools
             var hud = new GameObject("HUD");
             hud.AddComponent<GameHud>();
             hud.AddComponent<ShopMenu>();
+            hud.AddComponent<MapOverlay>();
             hud.AddComponent<InventoryMenu>();
             hud.AddComponent<OptionsMenu>();
             hud.AddComponent<FriendSlop.Profile.CustomizeMenu>();
@@ -1041,22 +1086,66 @@ namespace FriendSlop.EditorTools
             return lantern;
         }
 
+        /// <summary>Matte see-through smoke (no shine, no reflections: glossy puffs read as soap bubbles).</summary>
+        static Material SmokeMaterial()
+        {
+            string path = $"{MatDir}/SmokeFx.mat";
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (m == null) { m = new Material(Shader.Find("Universal Render Pipeline/Lit")); AssetDatabase.CreateAsset(m, path); }
+            m.SetFloat("_Surface", 1f);
+            m.SetFloat("_Blend", 0f);
+            m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            m.SetFloat("_ZWrite", 0f);
+            m.SetFloat("_Smoothness", 0f);
+            m.SetFloat("_SpecularHighlights", 0f);
+            m.SetFloat("_EnvironmentReflections", 0f);
+            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            m.EnableKeyword("_SPECULARHIGHLIGHTS_OFF");
+            m.EnableKeyword("_ENVIRONMENTREFLECTIONS_OFF");
+            m.SetOverrideTag("RenderType", "Transparent");
+            m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            m.SetColor("_BaseColor", new Color(0.6f, 0.6f, 0.63f, 0.3f));
+            EditorUtility.SetDirty(m);
+            return m;
+        }
+
         /// <summary>Camp's campfire: logs, a stone ring and a flickering warm light that matters at night.</summary>
         static Light BuildCampfire(Transform world)
         {
             var fire = new GameObject("Campfire").transform;
             fire.SetParent(world, false);
             fire.position = CampfirePos;
-            for (int i = 0; i < 8; i++)
+            var rng = new System.Random(7);
+            float R(float a, float b) => a + (float)rng.NextDouble() * (b - a);
+            // Stone ring: chunky, uneven stones, some stacked.
+            for (int i = 0; i < 11; i++)
             {
-                float a = i * Mathf.PI / 4f;
-                Visual(PrimitiveType.Sphere, "Stone", fire, new Vector3(Mathf.Cos(a) * 0.75f, 0.1f, Mathf.Sin(a) * 0.75f), new Vector3(0.32f, 0.22f, 0.32f), "Stone");
+                float a = i * Mathf.PI * 2f / 11f + R(-0.08f, 0.08f);
+                var st = Visual(PrimitiveType.Sphere, "Stone", fire, new Vector3(Mathf.Cos(a) * 0.82f, 0.1f, Mathf.Sin(a) * 0.82f), new Vector3(R(0.3f, 0.42f), R(0.2f, 0.3f), R(0.28f, 0.38f)), "Stone");
+                st.transform.localRotation = Quaternion.Euler(R(-12f, 12f), a * Mathf.Rad2Deg, R(-12f, 12f));
             }
-            for (int i = 0; i < 3; i++)
-                Visual(PrimitiveType.Cylinder, "Log", fire, new Vector3(0f, 0.15f, 0f), new Vector3(0.14f, 0.45f, 0.14f), "Bark")
-                    .transform.localRotation = Quaternion.Euler(70f, i * 60f, 0f);
-            Visual(PrimitiveType.Sphere, "Flame", fire, new Vector3(0f, 0.35f, 0f), new Vector3(0.45f, 0.6f, 0.45f), "Glow");
-            Visual(PrimitiveType.Sphere, "Flame2", fire, new Vector3(0.05f, 0.62f, 0.02f), new Vector3(0.25f, 0.4f, 0.25f), "Glow");
+            // Ash bed and glowing coals.
+            Visual(PrimitiveType.Cylinder, "Ash", fire, new Vector3(0f, 0.02f, 0f), new Vector3(1.25f, 0.02f, 1.25f), "Ash");
+            for (int i = 0; i < 9; i++)
+                Visual(PrimitiveType.Sphere, "Coal", fire, new Vector3(R(-0.35f, 0.35f), 0.06f, R(-0.35f, 0.35f)), new Vector3(R(0.1f, 0.18f), R(0.06f, 0.1f), R(0.1f, 0.18f)), "Coal");
+            // Log teepee, charred where it meets the flames.
+            for (int i = 0; i < 5; i++)
+            {
+                var log = Visual(PrimitiveType.Cylinder, "Log", fire, Vector3.zero, new Vector3(0.13f, 0.42f, 0.13f), "Bark").transform;
+                log.localRotation = Quaternion.Euler(0f, i * 72f + R(-8f, 8f), 0f) * Quaternion.Euler(0f, 0f, 58f);
+                log.localPosition = log.localRotation * new Vector3(0f, 0.36f, 0f) + Vector3.up * 0.05f;
+            }
+            // Two sitting logs.
+            for (int e = -1; e <= 1; e += 2)
+            {
+                var seat = Visual(PrimitiveType.Cylinder, "SeatLog", fire, new Vector3(e * 2.1f, 0.22f, 0.4f * e), new Vector3(0.42f, 0.9f, 0.42f), "Bark").transform;
+                seat.localRotation = Quaternion.Euler(0f, e * 20f, 90f);
+                Visual(PrimitiveType.Cylinder, "Ring", seat, new Vector3(0f, 1.0f, 0f), new Vector3(0.92f, 0.01f, 0.92f), "Plank");
+                Visual(PrimitiveType.Cylinder, "Ring", seat, new Vector3(0f, -1.0f, 0f), new Vector3(0.92f, 0.01f, 0.92f), "Plank");
+                var sc = seat.gameObject.AddComponent<CapsuleCollider>();
+                sc.direction = 1; sc.radius = 0.5f; sc.height = 2f;
+            }
             var col = fire.gameObject.AddComponent<CapsuleCollider>();
             col.radius = 0.8f; col.height = 0.6f; col.center = new Vector3(0f, 0.3f, 0f);
             var lightGo = new GameObject("FireLight");
@@ -1068,6 +1157,16 @@ namespace FriendSlop.EditorTools
             light.range = 16f;
             light.intensity = 3.2f;
             light.shadows = LightShadows.None; // point shadows cost 6 shadow maps; not worth it
+
+            var fx = fire.gameObject.AddComponent<FriendSlop.World.CampfireFx>();
+            var fso = new SerializedObject(fx);
+            fso.FindProperty("outer").objectReferenceValue = Mats["Glow"];
+            fso.FindProperty("mid").objectReferenceValue = Mats["FlameYellow"];
+            fso.FindProperty("core").objectReferenceValue = Mats["FlameCore"];
+            fso.FindProperty("ember").objectReferenceValue = Mats["FlameYellow"];
+            fso.FindProperty("smoke").objectReferenceValue = SmokeMaterial();
+            fso.FindProperty("fireLight").objectReferenceValue = light;
+            fso.ApplyModifiedPropertiesWithoutUndo();
             return light;
         }
 

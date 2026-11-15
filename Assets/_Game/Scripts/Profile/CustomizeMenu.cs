@@ -21,6 +21,7 @@ namespace FriendSlop.Profile
 
         void OnGUI()
         {
+            GUI.skin = FriendSlop.Game.UiTheme.Skin;
             if (!IsOpen) return;
             var p = PlayerProfile.Current;
             _nameField ??= p.displayName;

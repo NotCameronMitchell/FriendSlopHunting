@@ -343,8 +343,18 @@ namespace FriendSlop.Animals
             {
                 _nextAttack = Time.time + species.attackCooldown;
                 Vector3 dir = dist > 0.01f ? flat / dist : transform.forward;
-                Vector3 knock = dir * species.knockback + Vector3.up * species.knockback * 0.45f;
-                _target.ServerDamage(species.attackDamage * (Elite.Value ? EliteDamage : 1f), knock, species.isBoss ? species.bossTitle : DisplayName);
+                if (species.stinky)
+                {
+                    // Turn tail and spray: a lingering cloud that hurts anyone standing in it.
+                    Vector3 at = transform.position + dir * Mathf.Min(dist, species.attackRange) * 0.6f + Vector3.up * 0.4f;
+                    StartCoroutine(ServerStinkCloud(at));
+                    StinkRpc(at);
+                }
+                else
+                {
+                    Vector3 knock = dir * species.knockback + Vector3.up * species.knockback * 0.45f;
+                    _target.ServerDamage(species.attackDamage * (Elite.Value ? EliteDamage : 1f), knock, species.isBoss ? species.bossTitle : DisplayName);
+                }
                 AttackRpc();
             }
         }
@@ -401,6 +411,74 @@ namespace FriendSlop.Animals
                     _nextThink = Time.time + Random.Range(2f, 5f);
                 }
             }
+        }
+
+        // ============================== skunk stink ==============================
+
+        const float StinkRadius = 2.8f, StinkSeconds = 5f;
+
+        IEnumerator ServerStinkCloud(Vector3 center)
+        {
+            float until = Time.time + StinkSeconds;
+            var announced = new HashSet<ulong>();
+            while (Time.time < until)
+            {
+                foreach (var client in NetworkManager.ConnectedClientsList)
+                {
+                    if (client.PlayerObject == null || !client.PlayerObject.TryGetComponent(out PlayerHealth ph) || ph.IsDown.Value) continue;
+                    if ((client.PlayerObject.transform.position + Vector3.up * 0.9f - center).sqrMagnitude > StinkRadius * StinkRadius) continue;
+                    ph.ServerDamage(species.attackDamage * 0.5f * (Elite.Value ? EliteDamage : 1f), Vector3.zero, "skunk stink");
+                    if (announced.Add(client.ClientId))
+                        GameState.Instance?.ServerAnnounce($"{GameState.PlayerName(client.ClientId)} got skunked! Phew!");
+                }
+                yield return new WaitForSeconds(0.5f);
+            }
+        }
+
+        [Rpc(SendTo.Everyone)]
+        void StinkRpc(Vector3 center)
+        {
+            SfxPlayer.PlayAt(Sfx.Boing, center, 0.5f, 0.45f);
+            StartCoroutine(StinkFx(center));
+        }
+
+        /// <summary>Cartoon gas: green puffs that billow out, drift up and shrink away.</summary>
+        IEnumerator StinkFx(Vector3 center)
+        {
+            var mat = _rig != null && _rig.glowMaterial != null ? _rig.glowMaterial : null;
+            var block = new MaterialPropertyBlock();
+            block.SetColor("_BaseColor", new Color(0.55f, 0.75f, 0.2f));
+            block.SetColor("_EmissionColor", new Color(0.12f, 0.2f, 0.02f));
+            const int N = 9;
+            var puffs = new Transform[N];
+            var offsets = new Vector3[N];
+            var sizes = new float[N];
+            for (int i = 0; i < N; i++)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                Destroy(go.GetComponent<Collider>());
+                var r = go.GetComponent<Renderer>();
+                if (mat) r.sharedMaterial = mat;
+                r.SetPropertyBlock(block);
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                puffs[i] = go.transform;
+                offsets[i] = Vector3.Scale(Random.insideUnitSphere, new Vector3(1f, 0.5f, 1f)) * StinkRadius * 0.55f;
+                sizes[i] = Random.Range(0.7f, 1.3f);
+            }
+            float t = 0f;
+            while (t < StinkSeconds)
+            {
+                t += Time.deltaTime;
+                float grow = Mathf.Clamp01(t / 0.6f), fade = 1f - Mathf.Clamp01((t - (StinkSeconds - 1.2f)) / 1.2f);
+                for (int i = 0; i < N; i++)
+                {
+                    float wob = 1f + Mathf.Sin(t * 3f + i) * 0.08f;
+                    puffs[i].position = center + offsets[i] * (0.6f + grow * 0.4f) + Vector3.up * (t * 0.12f + Mathf.Sin(t * 1.7f + i) * 0.08f);
+                    puffs[i].localScale = Vector3.one * sizes[i] * StinkRadius * 0.5f * grow * fade * wob;
+                }
+                yield return null;
+            }
+            foreach (var p in puffs) if (p) Destroy(p.gameObject);
         }
 
         PlayerHealth NearestPlayer(float radius)

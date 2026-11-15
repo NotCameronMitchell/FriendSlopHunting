@@ -569,6 +569,23 @@ namespace FriendSlop.EditorTools
                     foreach (var a in _zoo) if (a) a.IsAngry.Value = !a.IsAngry.Value;
                     Debug.Log("[Bridge] zoo angry toggled");
                     break;
+                case "selftest-zoo-side":
+                {
+                    // Spread the zoo out in a row, all facing +x, for profile shots from -z.
+                    var sb = new System.Text.StringBuilder();
+                    float zx = -16f;
+                    foreach (var a in _zoo)
+                    {
+                        if (!a || a.Species.isBoss) continue;
+                        float len = a.Species.bodyLength * a.Species.scale;
+                        zx += len * 0.5f + 1.2f;
+                        a.transform.SetPositionAndRotation(new Vector3(zx, 0f, 4f), Quaternion.Euler(0f, 90f, 0f));
+                        sb.Append($"{a.Species.displayName}@{zx:0.0} ");
+                        zx += len * 0.5f + 1.2f;
+                    }
+                    Debug.Log($"[Bridge] zoo side → {sb}");
+                }
+                    break;
                 case "selftest-zoo-kill":
                     foreach (var a in _zoo) if (a && !a.IsDead.Value) a.ServerApplyHit(99999f, Vector3.forward * 0.2f, ShotStyle.None, 0);
                     Debug.Log("[Bridge] zoo killed");
@@ -648,6 +665,38 @@ namespace FriendSlop.EditorTools
                         if (EditorApplication.isPlaying) FriendSlop.Audio.SfxPlayer.Play2D(c, 0.05f);
                     }
                     Debug.Log(sb.ToString());
+                    break;
+                }
+                case "ui-map":
+                    FriendSlop.Game.MapOverlay.IsOpen = !FriendSlop.Game.MapOverlay.IsOpen;
+                    Debug.Log($"[Bridge] map open={FriendSlop.Game.MapOverlay.IsOpen}");
+                    break;
+                case "ui-shop-weapons": case "ui-shop-snacks": case "ui-shop-upgrades":
+                    FriendSlop.Game.ShopMenu.RequestedTab = cmd.EndsWith("weapons") ? 0 : cmd.EndsWith("snacks") ? 1 : 2;
+                    FriendSlop.Game.ShopMenu.Open();
+                    Debug.Log("[Bridge] shop open");
+                    break;
+                case "ui-close":
+                    FriendSlop.Game.GameMenus.Close(); FriendSlop.Game.MapOverlay.IsOpen = false;
+                    break;
+                case "items-buy":
+                {
+                    var it = FriendSlop.Player.PlayerItems.Local;
+                    if (it == null) { Debug.LogWarning("[Bridge] items-buy: in a hunt"); return; }
+                    it.RequestBuy(FriendSlop.Player.ItemKind.ProteinBar); it.RequestBuy(FriendSlop.Player.ItemKind.ProteinBar); it.RequestBuy(FriendSlop.Player.ItemKind.EnergyDrink);
+                    Debug.Log("[Bridge] bought 2 bars + 1 drink");
+                    break;
+                }
+                case "items-use":
+                {
+                    var it = FriendSlop.Player.PlayerItems.Local;
+                    it?.RequestUse(FriendSlop.Player.ItemKind.ProteinBar); it?.RequestUse(FriendSlop.Player.ItemKind.EnergyDrink);
+                    break;
+                }
+                case "items-status":
+                {
+                    var it = FriendSlop.Player.PlayerItems.Local; var hp = FriendSlop.Player.PlayerHealth.Local;
+                    Debug.Log($"[Bridge] items bars={it?.Count(FriendSlop.Player.ItemKind.ProteinBar)} drinks={it?.Count(FriendSlop.Player.ItemKind.EnergyDrink)} boost={it?.BoostLeft:0.0}s hp={hp?.Health.Value:0}");
                     break;
                 }
                 case "selftest-money":

@@ -41,6 +41,7 @@ namespace FriendSlop.Game
 
         void OnGUI()
         {
+            GUI.skin = FriendSlop.Game.UiTheme.Skin;
             bool inPause = GameMenus.Open == GameMenus.Menu.Pause;
             bool inOptions = GameMenus.Open == GameMenus.Menu.Options || OpenFromMainMenu;
             if (!inPause && !inOptions) return;

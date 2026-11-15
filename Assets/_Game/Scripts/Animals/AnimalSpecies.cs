@@ -90,6 +90,8 @@ namespace FriendSlop.Animals
         public bool nocturnal;
         [Tooltip("Flops over and plays dead when spooked (opossum).")]
         public bool playsDead;
+        [Tooltip("Sprays a lingering stink cloud instead of biting (skunks).")]
+        public bool stinky;
         [Tooltip("See-through, glowing-eyed, floaty (ghost geese).")]
         public bool ghostly;
         [Tooltip("Pitch-dark with glowing eyes (the Shadow Stag).")]

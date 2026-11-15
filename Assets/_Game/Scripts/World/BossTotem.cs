@@ -21,6 +21,18 @@ namespace FriendSlop.World
         public int SummonCost => summonCost;
         public AnimalSpecies BossSpecies => bossPrefab != null && bossPrefab.TryGetComponent(out Animal a) ? a.Species : null;
 
+        /// <summary>Is this totem's boss already roaming? (Different totems' bosses can be out together.)</summary>
+        public bool MyBossAlive
+        {
+            get
+            {
+                var s = BossSpecies;
+                foreach (var a in Animal.All)
+                    if (a != null && a.IsSpawned && a.Species == s && !a.IsDead.Value) return true;
+                return false;
+            }
+        }
+
         public static bool BossAlive
         {
             get
@@ -41,7 +53,7 @@ namespace FriendSlop.World
             if (state == null || species == null) return;
             string who = GameState.PlayerName(rpcParams.Receive.SenderClientId);
 
-            if (BossAlive) { state.ServerAnnounce($"{species.bossTitle} is already out there!"); return; }
+            if (MyBossAlive) { state.ServerAnnounce($"{species.bossTitle} is already out there!"); return; }
             if (state.Money.Value < summonCost) { state.ServerAnnounce($"Summoning {species.bossTitle} costs ${summonCost:N0}. Go hunt!"); return; }
 
             Vector2 dir = Random.insideUnitCircle.normalized;

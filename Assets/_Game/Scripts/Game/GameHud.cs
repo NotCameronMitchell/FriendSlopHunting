@@ -107,31 +107,38 @@ namespace FriendSlop.Game
         {
             var state = GameState.Instance;
             if (state == null || !state.IsSpawned) return;
+            GUI.skin = UiTheme.Skin;
 
-            _money ??= new GUIStyle(GUI.skin.label) { fontSize = 28, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperRight };
-            _toast ??= new GUIStyle(GUI.skin.label) { fontSize = 18, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperCenter };
-            _hint ??= new GUIStyle(GUI.skin.label) { fontSize = 16, alignment = TextAnchor.LowerCenter };
+            _money ??= new GUIStyle(UiTheme.HudBig) { fontSize = 30, alignment = TextAnchor.MiddleRight };
+            _money.normal.textColor = UiTheme.Gold;
+            _toast ??= new GUIStyle(UiTheme.Center) { fontSize = 16 };
+            _hint ??= new GUIStyle(UiTheme.Center) { fontSize = 15 };
 
             _marker ??= new GUIStyle(GUI.skin.label) { fontSize = 26, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            _gain ??= new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperRight };
+            _gain ??= new GUIStyle(GUI.skin.label) { fontSize = 20, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperRight };
 
-            // Money with a punch when it goes up.
+            // Top-right panel: team money (with a punch when it goes up), animals sold, clock.
+            var tr = new Rect(Screen.width - 250, 12, 236, 92);
+            UiTheme.Panel(tr);
             float p = (Time.unscaledTime - _punchStart) / PunchSeconds;
             bool punching = p >= 0f && p < 1f;
-            float scale = punching ? 1f + 0.45f * Mathf.Sin(p * Mathf.PI) : 1f;
-            _money.fontSize = Mathf.RoundToInt(28 * scale);
+            float scale = punching ? 1f + 0.35f * Mathf.Sin(p * Mathf.PI) : 1f;
+            _money.fontSize = Mathf.RoundToInt(30 * scale);
             var prevColor = GUI.color;
-            if (punching) GUI.color = Color.Lerp(new Color(0.4f, 1f, 0.4f), Color.white, p);
-            Shadowed(new Rect(Screen.width - 420, 12, 400, 50), $"${state.Money.Value:N0}", _money);
+            if (punching) GUI.color = Color.Lerp(new Color(0.5f, 1f, 0.5f), Color.white, p);
+            UiTheme.Shadow(new Rect(tr.x, tr.y + 4, tr.width - 16, 38), $"${state.Money.Value:N0}", _money);
             GUI.color = prevColor;
-            Shadowed(new Rect(Screen.width - 320, 56, 300, 24), $"{state.AnimalsSold.Value} sold", _hint);
-            DrawClock(prevColor);
+            GUI.Label(new Rect(tr.x + 14, tr.y + 10, 80, 22), "TEAM", UiTheme.Small);
+            var right = new GUIStyle(UiTheme.Small) { alignment = TextAnchor.MiddleRight };
+            right.normal.textColor = UiTheme.Muted;
+            GUI.Label(new Rect(tr.x, tr.y + 42, tr.width - 16, 20), $"{state.AnimalsSold.Value} sold", right);
+            DrawClock(prevColor, new Rect(tr.x, tr.y + 62, tr.width - 16, 22));
 
             float g = (Time.unscaledTime - _punchStart) / 1.4f;
             if (g >= 0f && g < 1f)
             {
                 GUI.color = new Color(0.45f, 1f, 0.45f, 1f - g);
-                Shadowed(new Rect(Screen.width - 320, 80 + g * 30f, 300, 30), $"+${_lastGain:N0}", _gain);
+                UiTheme.Shadow(new Rect(Screen.width - 330, 110 + g * 30f, 316, 30), $"+${_lastGain:N0}", _gain);
                 GUI.color = prevColor;
             }
 
@@ -139,12 +146,13 @@ namespace FriendSlop.Game
             if (s >= 0f && s < 1f)
             {
                 GUI.color = new Color(1f, 0.4f, 0.35f, 1f - s);
-                Shadowed(new Rect(Screen.width - 320, 80 + s * 30f, 300, 30), $"-${_lastSpend:N0}", _gain);
+                UiTheme.Shadow(new Rect(Screen.width - 330, 110 + s * 30f, 316, 30), $"-${_lastSpend:N0}", _gain);
                 GUI.color = prevColor;
             }
 
             DrawWeaponBar();
             DrawSurvival();
+            DrawItems();
             DrawSleep();
             DrawTank();
 
@@ -158,41 +166,81 @@ namespace FriendSlop.Game
                 GUI.color = prevColor;
             }
 
+            // Announcement feed: pills under the boss bar, newest at the bottom, fading out.
             float now = Time.unscaledTime;
             _toasts.RemoveAll(t => t.Until < now);
+            float ty = _bossBarShown ? 64f : 22f;
             for (int i = 0; i < _toasts.Count; i++)
             {
                 float alpha = Mathf.Clamp01((_toasts[i].Until - now) / 1f);
+                float tw = Mathf.Min(Screen.width - 560f, _toast.CalcSize(new GUIContent(_toasts[i].Text)).x + 36f);
+                var r = new Rect(Screen.width / 2f - tw / 2f, ty + i * 32, tw, 28);
                 var prev = GUI.color;
                 GUI.color = new Color(1f, 1f, 1f, alpha);
-                Shadowed(new Rect(Screen.width / 2f - 400, 60 + i * 26, 800, 26), _toasts[i].Text, _toast);
+                UiTheme.Pill(r);
+                UiTheme.Shadow(r, _toasts[i].Text, _toast);
                 GUI.color = prev;
             }
 
             string hint = NetworkPlayer.LocalHint;
             if (!string.IsNullOrEmpty(hint))
-                Shadowed(new Rect(Screen.width / 2f - 400, Screen.height - 120, 800, 30), hint, _hint);
+            {
+                float hw = _hint.CalcSize(new GUIContent(hint)).x + 40f;
+                var r = new Rect(Screen.width / 2f - hw / 2f, Screen.height - 132, hw, 32);
+                UiTheme.Pill(r);
+                UiTheme.Shadow(r, hint, _hint);
+            }
+        }
+
+        bool _bossBarShown;
+
+        /// <summary>Snack pockets (with their keys) and the energy-drink timer, beside the status panel.</summary>
+        void DrawItems()
+        {
+            var items = PlayerItems.Local;
+            if (items == null) return;
+            float x = 300f, y = Screen.height - 56f;
+            for (int k = 0; k < PlayerItems.Items.Length; k++)
+            {
+                var kind = (ItemKind)k;
+                int n = items.Count(kind);
+                var act = kind == ItemKind.ProteinBar ? FriendSlop.Settings.GameAction.UseProteinBar : FriendSlop.Settings.GameAction.UseEnergyDrink;
+                string label = $"{PlayerItems.Items[k].Name}  x{n}";
+                float w = UiTheme.HudLabel.CalcSize(new GUIContent(label)).x + 52f;
+                var r = new Rect(x, y, w, 30);
+                var prev = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, n > 0 ? 1f : 0.5f);
+                UiTheme.Pill(r);
+                UiTheme.KeyCap(r.x + 7, r.y + 5, FriendSlop.Settings.Controls.Label(act));
+                UiTheme.Shadow(new Rect(r.x + 36, r.y, w - 36, r.height), label, UiTheme.HudLabel);
+                GUI.color = prev;
+                x += w + 8f;
+            }
+            float left = items.BoostLeft;
+            if (left > 0f)
+                UiTheme.Bar(new Rect(300f, Screen.height - 82f, 200f, 18f), left / PlayerItems.BoostSeconds, new Color(0.35f, 0.85f, 1f), $"ENERGY  {left:0}s", UiTheme.Small);
         }
 
         GUIStyle _clock, _zzz;
 
         /// <summary>Day number + clock, a moon at night, and the goose countdown when the flock is close to haunting you.</summary>
-        void DrawClock(Color prevColor)
+        void DrawClock(Color prevColor, Rect at)
         {
             var cycle = FriendSlop.World.DayNightCycle.Instance;
             if (cycle == null || !cycle.IsSpawned) return;
-            _clock ??= new GUIStyle(GUI.skin.label) { fontSize = 16, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperRight };
+            _clock ??= new GUIStyle(UiTheme.Small) { fontSize = 15, alignment = TextAnchor.MiddleRight };
             bool night = cycle.IsNight;
-            GUI.color = night ? new Color(0.7f, 0.78f, 1f) : new Color(1f, 0.95f, 0.75f);
-            Shadowed(new Rect(Screen.width - 420, 82, 400, 24), $"{(night ? "Night" : "Day")} {cycle.Day}  ·  {cycle.ClockText}", _clock);
+            GUI.color = night ? new Color(0.72f, 0.8f, 1f) : new Color(1f, 0.93f, 0.7f);
+            UiTheme.Shadow(at, $"{(night ? "☾ Night" : "☀ Day")} {cycle.Day}  ·  {cycle.ClockText}", _clock);
             GUI.color = prevColor;
 
             var ev = NightEvents.Instance;
             if (ev == null || !ev.IsSpawned) return;
+            var below = new Rect(Screen.width - 420, at.y + 34, 406, 22);
             if (ev.GhostNight.Value)
             {
                 GUI.color = new Color(0.55f, 1f, 1f);
-                Shadowed(new Rect(Screen.width - 420, 104, 400, 24), "GHOST GOOSE NIGHT", _clock);
+                UiTheme.Shadow(below, "GHOST GOOSE NIGHT", _clock);
             }
             else
             {
@@ -200,7 +248,7 @@ namespace FriendSlop.Game
                 if (left <= 10 && ev.GeeseKilled.Value > 0)
                 {
                     GUI.color = new Color(0.8f, 0.9f, 1f, 0.85f);
-                    Shadowed(new Rect(Screen.width - 420, 104, 400, 24), $"The flock is watching... ({left} more geese)", _clock);
+                    UiTheme.Shadow(below, $"The flock is watching... ({left} more geese)", _clock);
                 }
             }
             GUI.color = prevColor;
@@ -267,28 +315,29 @@ namespace FriendSlop.Game
                     GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _white);
                 }
 
-                // Health bar (bottom left).
+                // Status panel (bottom left): level badge + XP, then the health bar.
+                var panel = new Rect(14, Screen.height - 104, 272, 90);
+                UiTheme.Panel(panel);
                 float frac = hp.Health.Value / hp.MaxHp;
-                var bar = new Rect(24, Screen.height - 52, 260, 22);
-                GUI.color = new Color(0f, 0f, 0f, 0.55f);
-                GUI.DrawTexture(bar, _white);
-                GUI.color = Color.Lerp(new Color(0.9f, 0.15f, 0.1f), new Color(0.3f, 0.85f, 0.3f), frac);
-                GUI.DrawTexture(new Rect(bar.x + 2, bar.y + 2, (bar.width - 4) * frac, bar.height - 4), _white);
-                GUI.color = Color.white;
-                GUI.Label(new Rect(bar.x + 8, bar.y, bar.width, bar.height), $"HP {Mathf.CeilToInt(hp.Health.Value)}", _small);
+                var bar = new Rect(panel.x + 12, panel.y + 52, panel.width - 24, 26);
+                var hpCol = Color.Lerp(UiTheme.Bad, UiTheme.Good, Mathf.InverseLerp(0.2f, 0.8f, frac));
+                if (frac < 0.25f) hpCol = Color.Lerp(hpCol, Color.white, 0.25f * (0.5f + 0.5f * Mathf.Sin(Time.time * 10f))); // low-health pulse
+                UiTheme.Bar(bar, frac, hpCol, $"♥  {Mathf.CeilToInt(hp.Health.Value)} / {Mathf.CeilToInt(hp.MaxHp)}");
 
-                // Hunter level + XP toward the next one, just above the health bar.
                 var prof = FriendSlop.Profile.PlayerProfile.Current;
                 int lv = prof.Level;
                 int lo = FriendSlop.Profile.PlayerProfile.XpForLevel(lv), hi = FriendSlop.Profile.PlayerProfile.XpForLevel(lv + 1);
                 float xpFrac = hi > lo ? Mathf.Clamp01((prof.xp - lo) / (float)(hi - lo)) : 1f;
-                var xpBar = new Rect(24, Screen.height - 64, 260, 8);
-                GUI.color = new Color(0f, 0f, 0f, 0.55f);
-                GUI.DrawTexture(xpBar, _white);
-                GUI.color = new Color(1f, 0.8f, 0.25f);
-                GUI.DrawTexture(new Rect(xpBar.x + 1, xpBar.y + 1, (xpBar.width - 2) * xpFrac, xpBar.height - 2), _white);
-                GUI.color = Color.white;
-                GUI.Label(new Rect(24, Screen.height - 88, 300, 22), $"Lv {lv}   {prof.xp - lo:N0} / {hi - lo:N0} XP", _small);
+                var badge = new Rect(panel.x + 12, panel.y + 10, 58, 32);
+                UiTheme.Pill(badge);
+                var lvStyle = new GUIStyle(UiTheme.Center) { fontSize = 15 };
+                lvStyle.normal.textColor = UiTheme.Gold;
+                GUI.Label(badge, $"Lv {lv}", lvStyle);
+                UiTheme.Bar(new Rect(panel.x + 78, panel.y + 22, panel.width - 90, 10), xpFrac, UiTheme.Gold);
+                var xpStyle = new GUIStyle(UiTheme.Small) { fontSize = 11 };
+                xpStyle.normal.textColor = UiTheme.Muted;
+                GUI.Label(new Rect(panel.x + 80, panel.y + 4, panel.width - 90, 18), $"{prof.xp - lo:N0} / {hi - lo:N0} XP", xpStyle);
+                bar = new Rect(panel.x, panel.y - 4, panel.width, 26); // mic line sits just above the panel
 
                 // Mic status (voice chat itself arrives later; the controls already work).
                 string mic = null;
@@ -321,18 +370,17 @@ namespace FriendSlop.Game
                 }
             }
 
-            // Boss bar (top center) while a boss is alive.
+            // Boss bars (top center) while bosses are alive (two different bosses can be out at once).
+            _bossBarShown = false;
+            int shown = 0;
             foreach (var a in FriendSlop.Animals.Animal.All)
             {
-                if (a == null || !a.IsSpawned || a.Species == null || !a.Species.isBoss || a.IsDead.Value) continue;
-                var r = new Rect(Screen.width / 2f - 300, 24, 600, 20);
-                GUI.color = new Color(0f, 0f, 0f, 0.6f);
-                GUI.DrawTexture(r, _white);
-                GUI.color = new Color(0.85f, 0.2f, 0.15f);
-                GUI.DrawTexture(new Rect(r.x + 2, r.y + 2, (r.width - 4) * a.HealthFraction.Value, r.height - 4), _white);
-                GUI.color = Color.white;
-                Shadowed(new Rect(r.x, r.y - 2, r.width, 24), $"{a.Species.bossTitle}{(a.IsAngry.Value ? " (hunting)" : "")}", _toast);
-                break;
+                if (a == null || !a.IsSpawned || a.Species == null || !a.Species.isBoss || a.IsDead.Value || shown >= 2) continue;
+                var r = new Rect(Screen.width / 2f - 300, 18 + shown * 30, 600, 24);
+                UiTheme.Bar(r, a.HealthFraction.Value, new Color(0.88f, 0.22f, 0.16f));
+                UiTheme.Shadow(r, $"☠ {a.Species.bossTitle}{(a.IsAngry.Value ? "  (hunting)" : "")}", _toast);
+                _bossBarShown = true;
+                shown++;
             }
             GUI.color = prev;
         }
@@ -343,28 +391,36 @@ namespace FriendSlop.Game
             var state = GameState.Instance;
             if (weapons == null || state == null || weapons.Catalog == null) return;
 
-            _weapon ??= new GUIStyle(GUI.skin.label) { fontSize = 15, alignment = TextAnchor.MiddleRight };
+            _weapon ??= new GUIStyle(UiTheme.HudLabel) { fontSize = 14, alignment = TextAnchor.MiddleLeft };
             var catalog = weapons.Catalog;
             var slots = weapons.Slots();
-            float y = Screen.height - 40f;
             var prev = GUI.color;
 
-            GUI.color = new Color(1f, 1f, 1f, 0.55f);
-            Shadowed(new Rect(Screen.width - 420, y, 400, 22), "Tab inventory · G drop", _weapon);
-            y -= 26f;
-
-            for (int s = slots.Count - 1; s >= 0; s--)
+            // Weapons panel (bottom right): a row per slot with its key; the equipped one is highlighted.
+            const float rowH = 26f, pw = 250f;
+            float ph = slots.Count * rowH + 40f;
+            var panel = new Rect(Screen.width - pw - 14, Screen.height - ph - 14, pw, ph);
+            UiTheme.Panel(panel);
+            float y = panel.y + 10f;
+            for (int s = 0; s < slots.Count; s++)
             {
                 int i = slots[s];
                 var def = catalog.Get(i);
                 bool on = weapons.Equipped.Value == i;
-                string label = $"{def.displayName}  [{FriendSlop.Weapons.WeaponCatalog.KeyLabel(s)}]";
-                if (on && def.spinUpTime > 0f && weapons.SpinUp < 1f) label = $"spinning {weapons.SpinUp:P0}  " + label;
-                GUI.color = on ? new Color(1f, 0.85f, 0.3f) : new Color(1f, 1f, 1f, 0.6f);
+                var row = new Rect(panel.x + 8, y, pw - 16, rowH - 2);
+                if (on) { GUI.color = new Color(1f, 0.64f, 0.22f, 0.9f); UiTheme.Pill(row); GUI.color = prev; }
+                UiTheme.KeyCap(row.x + 6, row.y + 2, FriendSlop.Weapons.WeaponCatalog.KeyLabel(s));
+                string label = def.displayName;
+                if (on && def.spinUpTime > 0f && weapons.SpinUp < 1f) label += $"  (spinning {weapons.SpinUp:P0})";
+                _weapon.normal.textColor = on ? UiTheme.Gold : UiTheme.Text;
                 _weapon.fontStyle = on ? FontStyle.Bold : FontStyle.Normal;
-                Shadowed(new Rect(Screen.width - 420, y, 400, 22), label, _weapon);
-                y -= 22f;
+                UiTheme.Shadow(new Rect(row.x + 34, row.y, row.width - 34, row.height), label, _weapon);
+                y += rowH;
             }
+            var help = new GUIStyle(UiTheme.Small) { fontSize = 11, alignment = TextAnchor.MiddleCenter };
+            help.normal.textColor = UiTheme.Muted;
+            GUI.Label(new Rect(panel.x, panel.yMax - 26, pw, 20),
+                $"{FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.Inventory)} inventory  ·  {FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.DropWeapon)} drop  ·  {FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.Map)} map", help);
             GUI.color = prev;
         }
 

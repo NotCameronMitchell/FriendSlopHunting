@@ -107,6 +107,35 @@ namespace FriendSlop.EditorTools
                 Move(s, 2f, 10f); Fight(s, Temperament.Predator, aggro: 22f, lose: 40f, dmg: 9f, range: 1.3f, cd: 1.0f, knock: 5f, charge: 10f, flee: 0.3f);
                 s.nocturnal = true; Spawn(s, 8, 3, 50f, 140f);
             });
+            yield return ("Skunk", s =>
+            {
+                Id(s, "Skunk", C(0.08f, 0.08f, 0.09f), C(0.96f, 0.96f, 0.94f), 22, 2f, 5f, 30f, Voice.Squeak, 1.4f);
+                Body(s, BodyStyle.Quadruped, 0.55f, 0.3f, 0.12f, 0.22f); s.hopHeight = 0.02f; s.hopsPerMeter = 1.8f;
+                Move(s, 1.1f, 5.5f, spook: 6f); Fight(s, Temperament.Territorial, aggro: 5f, lose: 14f, dmg: 3f, range: 2.6f, cd: 2.5f, knock: 1f, charge: 5f, flee: 0.5f);
+                s.stinky = true; s.nocturnal = true; Spawn(s, 5, 1, 20f, 110f);
+            });
+            // ---- More daytime wildlife ----
+            yield return ("Fox", s =>
+            {
+                Id(s, "Fox", C(0.86f, 0.42f, 0.14f), C(0.97f, 0.95f, 0.92f), 28, 4f, 8f, 45f, Voice.Growl, 1.8f);
+                Body(s, BodyStyle.Quadruped, 0.75f, 0.32f, 0.3f, 0.24f); s.bigEars = true; s.hopHeight = 0.05f; s.hopsPerMeter = 1.3f;
+                Move(s, 1.9f, 11f, spook: 13f); s.hearingRadius = 40f; Spawn(s, 4, 1, 25f, 90f);
+            });
+            yield return ("Turkey", s =>
+            {
+                Id(s, "Turkey", C(0.33f, 0.24f, 0.16f), C(0.85f, 0.18f, 0.15f), 26, 5f, 9f, 60f, Voice.Quack, 0.55f);
+                Body(s, BodyStyle.Bird, 0.6f, 0.4f, 0.3f, 0.13f); s.hopHeight = 0.05f; s.hopsPerMeter = 2.2f;
+                Move(s, 1.3f, 7f); Fight(s, Temperament.Aggressive, aggro: 7f, lose: 22f, dmg: 6f, range: 1.0f, cd: 1.1f, knock: 6f, charge: 7f, flee: 0.35f);
+                Spawn(s, 5, 3, 25f, 85f);
+            });
+            yield return ("MountainGoat", s =>
+            {
+                Id(s, "Mountain Goat", C(0.93f, 0.92f, 0.88f), C(0.18f, 0.16f, 0.15f), 70, 60f, 110f, 160f, Voice.Bellow, 1.7f);
+                Body(s, BodyStyle.Quadruped, 1.1f, 0.6f, 0.55f, 0.28f); s.hopHeight = 0.05f; s.hopsPerMeter = 0.9f;
+                // Headbutts send hunters flying: huge knockback, modest damage.
+                Move(s, 1.4f, 9f); Fight(s, Temperament.Territorial, aggro: 9f, lose: 28f, dmg: 10f, range: 1.4f, cd: 1.6f, knock: 26f, charge: 9f, flee: 0.15f);
+                Spawn(s, 4, 2, 105f, 145f); // up on the mountain ring
+            });
             // ---- Night events (spawned by NightEvents, not by spawners) ----
             yield return ("GhostGoose", s =>
             {
@@ -129,6 +158,15 @@ namespace FriendSlop.EditorTools
                 Move(s, 1.5f, 9f); Fight(s, Temperament.Predator, aggro: 60f, lose: 120f, dmg: 40f, range: 2.6f, cd: 2.0f, knock: 18f, charge: 10f, flee: 0f);
                 Spawn(s, 0, 1, 0f, 0f);
                 s.isBoss = true; s.bossTitle = "Big Doug the Elk"; s.bounty = 800;
+            });
+            yield return ("Hamzilla", s =>
+            {
+                Id(s, "Hog", C(0.36f, 0.24f, 0.2f), C(0.98f, 0.92f, 0.78f), 450, 900f, 1200f, 3200f, Voice.Grunt, 0.5f);
+                Body(s, BodyStyle.Quadruped, 1.2f, 0.62f, 0.38f, 0.4f); s.tusks = true; s.scale = 2.6f; s.hopHeight = 0.04f; s.hopsPerMeter = 0.4f;
+                // Charges constantly and bowls hunters over.
+                Move(s, 1.6f, 9f); Fight(s, Temperament.Predator, aggro: 60f, lose: 120f, dmg: 35f, range: 2.4f, cd: 1.5f, knock: 22f, charge: 13f, flee: 0f);
+                Spawn(s, 0, 1, 0f, 0f);
+                s.isBoss = true; s.bossTitle = "Hamzilla the Hog"; s.bounty = 1000;
             });
         }
 

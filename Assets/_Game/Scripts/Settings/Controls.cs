@@ -14,6 +14,7 @@ namespace FriendSlop.Settings
         Interact, DropWeapon, Inventory,
         PushToTalk, ToggleMute,
         Pause,
+        UseProteinBar, UseEnergyDrink, Map,
     }
 
     /// <summary>
@@ -73,6 +74,8 @@ namespace FriendSlop.Settings
             { GameAction.Inventory, "Inventory" },
             { GameAction.PushToTalk, "Push to talk" }, { GameAction.ToggleMute, "Mute / unmute mic" },
             { GameAction.Pause, "Pause menu" },
+            { GameAction.UseProteinBar, "Eat a protein bar" }, { GameAction.UseEnergyDrink, "Drink an energy drink" },
+            { GameAction.Map, "Map" },
         };
 
         static readonly Dictionary<GameAction, Binding> Defaults = new Dictionary<GameAction, Binding>
@@ -83,8 +86,10 @@ namespace FriendSlop.Settings
             { GameAction.Fire, Binding.M(0) }, { GameAction.Aim, Binding.M(1) },
             { GameAction.Interact, Binding.K(Key.E) }, { GameAction.DropWeapon, Binding.K(Key.G) },
             { GameAction.Inventory, Binding.K(Key.Tab) },
-            { GameAction.PushToTalk, Binding.K(Key.V) }, { GameAction.ToggleMute, Binding.K(Key.M) },
+            { GameAction.PushToTalk, Binding.K(Key.V) }, { GameAction.ToggleMute, Binding.K(Key.N) },
             { GameAction.Pause, Binding.K(Key.Escape) },
+            { GameAction.UseProteinBar, Binding.K(Key.Q) }, { GameAction.UseEnergyDrink, Binding.K(Key.X) },
+            { GameAction.Map, Binding.K(Key.M) },
         };
 
         static Dictionary<GameAction, Binding> _bindings;

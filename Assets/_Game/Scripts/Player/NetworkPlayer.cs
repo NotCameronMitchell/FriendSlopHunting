@@ -97,6 +97,7 @@ namespace FriendSlop.Player
         Vector3 _knockback;
         PlayerHealth _health;
         PlayerUpgrades _upgrades;
+        PlayerItems _items;
         Vector3[] _bodyRestPos;
         Quaternion[] _bodyRestRot;
         Vector3 _pivotRestPos;
@@ -111,6 +112,7 @@ namespace FriendSlop.Player
             _cc = GetComponent<CharacterController>();
             _health = GetComponent<PlayerHealth>();
             _upgrades = GetComponent<PlayerUpgrades>();
+            _items = GetComponent<PlayerItems>();
             if (cameraPivot) _pivotRestPos = cameraPivot.localPosition;
         }
 
@@ -279,12 +281,38 @@ namespace FriendSlop.Player
         {
             if (!Sleeping.Value) return;
             Sleeping.Value = false;
-            Vector3 standAt = _bed ? _bed.transform.position + _bed.transform.right * 1.1f : transform.position;
-            transform.position = standAt + Vector3.up * 0.1f;
+            transform.position = _bed ? FreeSpotNear(_bed.transform) : transform.position + Vector3.up * 0.1f;
             _pitch = 0f;
             if (cameraPivot) cameraPivot.localPosition = _pivotRestPos;
             _cc.enabled = true;
             _bed = null;
+        }
+
+        /// <summary>
+        /// A spot beside the bed where a hunter fits (no walls, bunks or sleeping friends), on the floor.
+        /// Tries the sides first, then the foot and head, then further out.
+        /// </summary>
+        Vector3 FreeSpotNear(Transform bed)
+        {
+            float radius = _cc ? _cc.radius + 0.05f : 0.4f, height = _cc ? _cc.height : 1.8f;
+            Vector3 c = bed.position;
+            Vector3[] dirs = { bed.right, -bed.right, bed.forward, -bed.forward, (bed.right + bed.forward).normalized,
+                               (-bed.right + bed.forward).normalized, (bed.right - bed.forward).normalized, (-bed.right - bed.forward).normalized };
+            var hits = new Collider[8];
+            foreach (float dist in new[] { 1.1f, 1.6f, 2.2f, 3f })
+                foreach (var d in dirs)
+                {
+                    Vector3 p = c + d * dist;
+                    // Find the floor under the spot.
+                    if (Physics.Raycast(p + Vector3.up * 1.5f, Vector3.down, out var floor, 3f, ~0, QueryTriggerInteraction.Ignore)) p.y = floor.point.y;
+                    Vector3 bottom = p + Vector3.up * (radius + 0.08f), top = p + Vector3.up * (height - radius);
+                    int n = Physics.OverlapCapsuleNonAlloc(bottom, top, radius, hits, ~0, QueryTriggerInteraction.Ignore);
+                    bool blocked = false;
+                    for (int i = 0; i < n && !blocked; i++)
+                        if (!hits[i].transform.IsChildOf(transform)) blocked = true;
+                    if (!blocked) return p + Vector3.up * 0.05f;
+                }
+            return c + bed.right * 1.1f + Vector3.up * 0.6f; // last resort: as before, a bit higher
         }
 
         void OnSleepingChanged(bool previous, bool sleeping)
@@ -442,6 +470,7 @@ namespace FriendSlop.Player
             float wade = FriendSlop.World.WaterVolume.DepthAt(transform.position);
             if (wade > 0.2f) speed *= Mathf.Lerp(0.75f, 0.5f, Mathf.InverseLerp(0.2f, 1.2f, wade)); // sloshing through water
             if (_upgrades) speed *= _upgrades.SpeedMult;
+            if (_items) speed *= _items.SpeedMult; // energy drink
             if (IsCarrying) speed *= CarrySpeedFactor();
             Vector3 horizontal = (transform.right * input.x + transform.forward * input.y) * speed + _knockback;
             _knockback = Vector3.MoveTowards(_knockback, Vector3.zero, 22f * Time.deltaTime);
@@ -534,6 +563,11 @@ namespace FriendSlop.Player
                     LocalHint = night ? "E sleep (everyone sleeping skips the night)" : "Beds are for nights. Come back after dark.";
                     if (night && controlling && Controls.Pressed(GameAction.Interact)) GoToSleep(bed);
                 }
+                else if (LookAt<LootCrate>(LootCrate.InteractRange) is LootCrate crate)
+                {
+                    LocalHint = crate.Looted ? $"The {crate.Label} is empty. It restocks tomorrow." : $"E open the {crate.Label}";
+                    if (!crate.Looted && controlling && Controls.Pressed(GameAction.Interact)) crate.RequestOpen();
+                }
                 else if (LookAt<GunShop>(GunShop.InteractRange) != null)
                 {
                     LocalHint = "E browse the gun shop";
@@ -541,10 +575,10 @@ namespace FriendSlop.Player
                 }
                 else if (LookAt<BossTotem>(BossTotem.InteractRange) is BossTotem totem && totem.BossSpecies != null)
                 {
-                    LocalHint = BossTotem.BossAlive
+                    LocalHint = totem.MyBossAlive
                         ? $"{totem.BossSpecies.bossTitle} is already loose…"
                         : $"E summon {totem.BossSpecies.bossTitle} (${totem.SummonCost:N0}, bounty ${totem.BossSpecies.bounty:N0})";
-                    if (!BossTotem.BossAlive && controlling && Controls.Pressed(GameAction.Interact)) totem.RequestSummon();
+                    if (!totem.MyBossAlive && controlling && Controls.Pressed(GameAction.Interact)) totem.RequestSummon();
                 }
                 else LocalHint = string.Empty;
                 return;

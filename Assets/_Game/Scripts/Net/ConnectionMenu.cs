@@ -25,6 +25,7 @@ namespace FriendSlop.Net
 
         void OnGUI()
         {
+            GUI.skin = FriendSlop.Game.UiTheme.Skin;
             if (_net == null || _net.Manager == null) return;
             _title ??= new GUIStyle(GUI.skin.label) { fontSize = 20, fontStyle = FontStyle.Bold };
             _wrap ??= new GUIStyle(GUI.skin.label) { wordWrap = true };

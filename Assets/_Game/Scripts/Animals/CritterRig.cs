@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace FriendSlop.Animals
 {
-    public enum Persona { Rabbit, Duck, Goose, Deer, Boar, Wolf, Moose, Bear, Boss, Raccoon, Opossum, Coyote }
+    public enum Persona { Rabbit, Duck, Goose, Deer, Boar, Wolf, Moose, Bear, Boss, Raccoon, Opossum, Coyote, Fox, Skunk, Goat, Turkey }
 
     /// <summary>
     /// Gives a procedural animal its personality. Runs locally on every peer from state that is
@@ -54,7 +54,7 @@ namespace FriendSlop.Animals
         static readonly int ColorId = Shader.PropertyToID("_Color");
         static readonly int EmissionId = Shader.PropertyToID("_EmissionColor");
 
-        bool IsCanine => persona == Persona.Wolf || persona == Persona.Coyote;
+        bool IsCanine => persona == Persona.Wolf || persona == Persona.Coyote || persona == Persona.Fox;
 
         Animal _animal;
         Carryable _carry;
@@ -484,9 +484,9 @@ namespace FriendSlop.Animals
                 if (!b || !b.parent) return;
                 list.Add(new Floppy
                 {
-                    bone = b, rest = rest, tipLocal = TipOf(b, fallbackTip), stiffness = k,
-                    damping = 1.2f * Mathf.Sqrt(k), // under-damped → wobble
-                    maxAngle = maxDeg * Mathf.Deg2Rad, gravity = g,
+                    bone = b, rest = rest, tipLocal = TipOf(b, fallbackTip), stiffness = k * 1.8f,
+                    damping = 1.75f * Mathf.Sqrt(k), // slightly under-damped: a little sway, settles fast
+                    maxAngle = maxDeg * 0.7f * Mathf.Deg2Rad, gravity = g * 0.6f,
                 });
             }
             // Parents before children (head before ears) so each reads its parent's fresh pose.
@@ -557,10 +557,10 @@ namespace FriendSlop.Animals
 
             // Squash on hard landings, then jiggle back.
             float impact = Mathf.Max(0f, accel.y) * dt;
-            if (impact > 0.12f) _squashVel -= impact * 5f;
+            if (impact > 0.18f) _squashVel -= impact * 2.5f;
             _squashVel += -_squash * 220f * dt;
             _squashVel *= Mathf.Exp(-8f * dt);
-            _squash = Mathf.Clamp(_squash + _squashVel * dt, -0.28f, 0.28f);
+            _squash = Mathf.Clamp(_squash + _squashVel * dt, -0.15f, 0.15f);
             if (body) body.localScale = new Vector3(1f - _squash * 0.6f, 1f + _squash, 1f - _squash * 0.6f);
         }
     }

@@ -21,7 +21,7 @@ namespace FriendSlop.EditorTools
         const int Res = 513, SplatRes = 512;
         const string Dir = "Assets/_Game/Data/Terrain";
         const string TexDir = "Assets/_Game/Materials/Ground";
-        static readonly Vector2 TotemXZ = new Vector2(0f, -36f);
+        public static readonly Vector2 TotemXZ = new Vector2(-14f, -106f); // Big Doug's totem, far out on the north ridge
 
         struct Lake { public Vector2 c; public float r, depth; }
 
@@ -50,6 +50,12 @@ namespace FriendSlop.EditorTools
                 return Mathf.Sqrt(best);
             }
         }
+
+        /// <summary>Out-in-the-wild landmarks (x, flat-pad radius, z): hog wallow, ranger tower, abandoned camp.</summary>
+        public static readonly Vector3 HogWallow = new Vector3(-62f, 12f, -68f);
+        public static readonly Vector3 RangerTower = new Vector3(42f, 9f, -82f);
+        public static readonly Vector3 OldCamp = new Vector3(-92f, 10f, -8f);
+        public static Vector3[] Landmarks => new[] { HogWallow, RangerTower, OldCamp };
 
         static readonly Lake[] Lakes =
         {
@@ -138,27 +144,46 @@ namespace FriendSlop.EditorTools
 
         static float P(float x, float z) => Mathf.PerlinNoise(x, z);
 
+        static float Hills(float x, float z)
+        {
+            float r = Mathf.Sqrt(x * x + z * z);
+            float hills = (P(x / 70f + 100f, z / 70f + 300f) - 0.5f) * 12f
+                        + (P(x / 30f + 50f, z / 30f + 80f) - 0.5f) * 4.8f
+                        + (P(x / 12f + 7f, z / 12f + 9f) - 0.5f) * 1.4f + 2.5f;
+            hills = Mathf.Max(hills, 0.5f); // no dry pits below lake level (they'd look like they should hold water)
+            return hills * Smooth(24f, 58f, r);  // camp stays flat
+        }
+
         static float DesignHeight(float x, float z)
         {
             float r = Mathf.Sqrt(x * x + z * z);
             var q = new Vector2(x, z);
 
-            float hills = (P(x / 70f + 100f, z / 70f + 300f) - 0.5f) * 12f
-                        + (P(x / 30f + 50f, z / 30f + 80f) - 0.5f) * 4.8f
-                        + (P(x / 12f + 7f, z / 12f + 9f) - 0.5f) * 1.4f + 2.5f;
-            hills = Mathf.Max(hills, 0.5f); // no dry pits below lake level (they'd look like they should hold water)
-            float h = hills * Smooth(24f, 58f, r);  // camp stays flat
+            float h = Hills(x, z);
 
-            // Mountain ring: the edge of the mountaintop valley (and the map border).
-            float e = Mathf.Max(Mathf.Abs(x), Mathf.Abs(z)) / Half + (P(x / 40f + 3f, z / 40f + 5f) - 0.5f) * 0.08f;
-            float m = Smooth(0.76f, 0.98f, e);
-            float ridge = 1f - Mathf.Abs(P(x / 25f + 11f, z / 25f + 13f) * 2f - 1f);
-            float crags = 1f - Mathf.Abs(P(x / 9f + 31f, z / 9f + 17f) * 2f - 1f);   // sharper secondary ridges
-            float gravel = (P(x / 3.5f + 5f, z / 3.5f + 8f) - 0.5f);                 // rocky surface detail
-            h += m * m * (28f + ridge * 24f + crags * crags * 7f + gravel * 1.6f);
+            // Mountain ring: a rounded, wobbly ring of peaks and saddles around the valley. Long foothills
+            // roll up out of the hills (no straight walls), crests are rounded, and height varies along the ring.
+            float ax = Mathf.Abs(x), az = Mathf.Abs(z);
+            float rounded = Mathf.Pow(ax * ax * ax * ax + az * az * az * az, 0.25f) / Half;            // rounded square
+            float warp = (P(x / 55f + 3f, z / 55f + 5f) - 0.5f) * 0.2f + (P(x / 22f + 9f, z / 22f + 1f) - 0.5f) * 0.05f;
+            float m = Smooth(0.58f, 1.04f, rounded + warp);
+            float massif = 0.5f + 0.65f * P(x / 60f + 41f, z / 60f + 23f);                            // peaks vs saddles
+            float ridge = 1f - Mathf.Abs(P(x / 32f + 11f, z / 32f + 13f) * 2f - 1f);
+            ridge = ridge * ridge * (3f - 2f * ridge);                                                   // rounded crests
+            float bumps = P(x / 14f + 31f, z / 14f + 17f);
+            float gravel = (P(x / 3.5f + 5f, z / 3.5f + 8f) - 0.5f);                                   // rocky surface detail
+            float mm = m * m * (3f - 2f * m);
+            h += mm * massif * (22f + ridge * 26f + bumps * 8f) + m * gravel * 1.2f;
+
+            // Flat pads for the landmarks, at the local hill height.
+            foreach (var lm in Landmarks)
+            {
+                float d = Vector2.Distance(q, new Vector2(lm.x, lm.z));
+                if (d < lm.y * 1.6f) h = Mathf.Lerp(Hills(lm.x, lm.z), h, Smooth(lm.y * 0.75f, lm.y * 1.55f, d));
+            }
 
             // Flat pad for the boss totem.
-            h = Mathf.Lerp(0f, h, Smooth(5f, 14f, Vector2.Distance(q, TotemXZ)));
+            h = Mathf.Lerp(Hills(TotemXZ.x, TotemXZ.y), h, Smooth(6f, 15f, Vector2.Distance(q, TotemXZ)));
 
             foreach (var l in Lakes)
             {
@@ -209,9 +234,15 @@ namespace FriendSlop.EditorTools
                     foreach (var s in Streams) dStream = Mathf.Min(dStream, s.Nearest(q, out _));
                     dWater = Mathf.Min(dWater, dStream - 2.5f);
 
-                    float rock = Mathf.Clamp01(Smooth(26f, 38f, steep) + Smooth(14f, 22f, h));
+                    float rock = Mathf.Clamp01(Smooth(30f, 44f, steep) + Smooth(18f, 30f, h) * 0.75f); // grassy foothills, rocky tops
                     float sand = (1f - Smooth(2f, 7f, dWater)) * (1f - Smooth(0.6f, 2.4f, h - Ground.WaterY)) + (1f - Smooth(1.5f, 4f, dStream)) * 0.8f;
                     float trail = 1f - Smooth(1.2f, 2.6f, DistToSegment(q, new Vector2(0f, -12f), TotemXZ));
+                    foreach (var lm in Landmarks) // worn paths out to each landmark, and a trampled clearing there
+                    {
+                        var lc = new Vector2(lm.x, lm.z);
+                        trail = Mathf.Max(trail, 1f - Smooth(1f, 2.2f, DistToSegment(q, lc.normalized * 14f, lc)));
+                        trail = Mathf.Max(trail, (1f - Smooth(lm.y * 0.45f, lm.y * 0.9f, Vector2.Distance(q, lc))) * 0.8f);
+                    }
                     float dirt = (1f - Smooth(8f, 17f, r)) * 0.85f + trail + Smooth(0.72f, 0.82f, P(x / 9f + 40f, z / 9f + 40f)) * 0.6f;
                     float forest = Smooth(0.45f, 0.65f, P(x / 18f + 20f, z / 18f + 60f)) * 0.9f * Smooth(16f, 30f, r);
                     float grass = 1f;
@@ -242,7 +273,7 @@ namespace FriendSlop.EditorTools
                 Layer("Grass", new Color(0.36f, 0.55f, 0.23f), new Color(0.46f, 0.63f, 0.27f), new Color(0.27f, 0.44f, 0.17f), 8f, speckle: new Color(0.6f, 0.72f, 0.3f)),
                 Layer("ForestFloor", new Color(0.25f, 0.38f, 0.17f), new Color(0.33f, 0.42f, 0.18f), new Color(0.2f, 0.3f, 0.13f), 8f, speckle: new Color(0.45f, 0.32f, 0.16f)),
                 Layer("Dirt", new Color(0.47f, 0.36f, 0.24f), new Color(0.55f, 0.43f, 0.3f), new Color(0.38f, 0.28f, 0.18f), 6f, speckle: new Color(0.62f, 0.56f, 0.48f)),
-                Layer("Rock", new Color(0.47f, 0.47f, 0.49f), new Color(0.58f, 0.58f, 0.6f), new Color(0.33f, 0.33f, 0.36f), 10f, cracks: true),
+                Layer("Rock", new Color(0.47f, 0.47f, 0.49f), new Color(0.58f, 0.58f, 0.6f), new Color(0.33f, 0.33f, 0.36f), 16f, cracks: true),
                 Layer("Sand", new Color(0.64f, 0.57f, 0.41f), new Color(0.72f, 0.65f, 0.48f), new Color(0.52f, 0.46f, 0.33f), 6f, speckle: new Color(0.45f, 0.4f, 0.3f)),
                 Layer("Snow", new Color(0.92f, 0.95f, 1f), new Color(1f, 1f, 1f), new Color(0.78f, 0.84f, 0.93f), 9f, speckle: new Color(0.7f, 0.8f, 0.95f)),
             };
@@ -313,9 +344,9 @@ namespace FriendSlop.EditorTools
                         float strata = Mathf.Sin((v * 9f + TileNoise(u, v, 4, seed + 3) * 1.6f) * Mathf.PI * 2f) * 0.5f + 0.5f;
                         c = Color.Lerp(c, Color.Lerp(dark, light, 0.5f), (strata - 0.5f) * 0.35f);
                         float rn = 1f - Mathf.Abs(TileNoise(u, v, 8, seed + 7) * 2f - 1f);
-                        if (rn > 0.86f) c = Color.Lerp(c, dark * 0.55f, (rn - 0.86f) * 6f);
+                        if (rn > 0.93f) c = Color.Lerp(c, dark * 0.8f, (rn - 0.93f) * 6f); // faint cracks (bold ones read as camo from afar)
                         float rn2 = 1f - Mathf.Abs(TileNoise(u, v, 16, seed + 11) * 2f - 1f);
-                        if (rn2 > 0.93f) c = Color.Lerp(c, dark * 0.65f, (rn2 - 0.93f) * 9f);
+                        if (rn2 > 0.965f) c = Color.Lerp(c, dark * 0.85f, (rn2 - 0.965f) * 8f);
                         if (TileNoise(u, v, 32, seed + 21) > 0.8f) c = Color.Lerp(c, new Color(0.45f, 0.52f, 0.36f), 0.35f); // lichen
                     }
                     c.a = smoothness; // URP terrain reads smoothness from the diffuse alpha (1 = chrome)

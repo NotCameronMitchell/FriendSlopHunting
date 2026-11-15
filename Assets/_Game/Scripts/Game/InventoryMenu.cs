@@ -18,6 +18,7 @@ namespace FriendSlop.Game
 
         void OnGUI()
         {
+            GUI.skin = FriendSlop.Game.UiTheme.Skin;
             if (!IsOpen) return;
             var weapons = PlayerWeapons.Local;
             if (weapons == null || weapons.Catalog == null) { GameMenus.Reset(); return; }
