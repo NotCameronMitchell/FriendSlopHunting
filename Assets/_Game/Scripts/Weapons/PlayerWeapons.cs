@@ -161,7 +161,7 @@ namespace FriendSlop.Weapons
             }
 
             float scroll = mouse.scroll.ReadValue().y;
-            if (Mathf.Abs(scroll) > 0.01f) Cycle(scroll > 0f ? -1 : 1);
+            if (Mathf.Abs(scroll) > 0.01f && !FriendSlop.World.GambleBetSpot.Focused) Cycle(scroll > 0f ? -1 : 1); // (scroll sets the bet at the Lucky Lodge)
         }
 
         void Cycle(int direction)
@@ -411,7 +411,10 @@ namespace FriendSlop.Weapons
             float maxRange = def.kind == WeaponKind.Hitscan ? def.range + 5f : 300f;
             if (distance > maxRange) return;
             if (!target.TryGet(out NetworkObject obj) || !obj.TryGetComponent(out Animal animal)) return;
-            float tolerance = def.kind == WeaponKind.Hitscan ? 3f : 4.5f;
+            // Hits are checked against the animal's root (its feet): allow for big bodies (moose antlers, bosses, elites).
+            var sp = animal.Species;
+            float size = sp != null ? (sp.bodyLength + sp.bodyHeight + sp.legLength) * sp.scale * animal.transform.lossyScale.x : 1f;
+            float tolerance = Mathf.Max(def.kind == WeaponKind.Hitscan ? 3f : 4.5f, size * 0.9f + 1.2f);
             if ((obj.transform.position - point).sqrMagnitude > tolerance * tolerance) return;
 
             var style = ShotStyle.None;

@@ -128,6 +128,21 @@ namespace FriendSlop.EditorTools
                 Debug.Log(sb.ToString());
                 return;
             }
+            if (cmd.StartsWith("gamble-money "))
+            {
+                // gamble-money <station> <option> <amount> : bet team money exactly like a player would.
+                var g = cmd.Split(' ');
+                FriendSlop.Game.GameState.Instance?.RequestGambleBet(int.Parse(g[1]), int.Parse(g[2]), int.Parse(g[3]));
+                Debug.Log($"[Bridge] gamble-money → station {g[1]} option {g[2]} ${g[3]}");
+                return;
+            }
+            if (cmd.StartsWith("gamble-force "))
+            {
+                var g = cmd.Split(' ');
+                FriendSlop.World.GambleStation.DebugNextSlots = new[] { int.Parse(g[1]), int.Parse(g[2]), int.Parse(g[3]) };
+                Debug.Log("[Bridge] next slots forced");
+                return;
+            }
             if (cmd.StartsWith("gamble "))
             {
                 // gamble <station 0-2> [red|black|green] : drop a freshly killed deer onto a Lucky Lodge pad.
@@ -228,6 +243,24 @@ namespace FriendSlop.EditorTools
                 Debug.Log($"[Bridge] night → {cycle?.ClockText} day {cycle?.Day} isNight={cycle?.IsNight} nightCritters={night} ghosts={ghosts} stags={stags} ghostNight={ev?.GhostNight.Value} geese={ev?.GeeseKilled.Value} sleeping={FriendSlop.Player.NetworkPlayer.Local?.Sleeping.Value}");
                 return;
             }
+            if (cmd.StartsWith("near "))
+            {
+                // near Boulder 3 14 : stand 14 m from the 3rd object named "Boulder", facing it.
+                var a = cmd.Substring(5).Split(' ');
+                var hp = FriendSlop.Player.PlayerHealth.Local;
+                int nth = a.Length > 1 ? int.Parse(a[1]) : 0; float dist = a.Length > 2 ? float.Parse(a[2], System.Globalization.CultureInfo.InvariantCulture) : 12f;
+                GameObject found = null; int seen = 0;
+                foreach (var go in UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsSortMode.None))
+                    if (string.Equals(go.name, a[0], System.StringComparison.OrdinalIgnoreCase) && seen++ == nth) { found = go.gameObject; break; }
+                if (hp == null || found == null) { Debug.LogWarning($"[Bridge] near: no {a[0]} #{nth}"); return; }
+                var tp = found.transform.position; var dirToCamp = (-new Vector3(tp.x, 0f, tp.z)).normalized;
+                var stand = tp + dirToCamp * dist; stand.y = FriendSlop.World.Ground.HeightAt(stand) + 0.2f;
+                var np = hp.GetComponent<FriendSlop.Player.NetworkPlayer>();
+                np.Teleport(stand);
+                np.transform.rotation = Quaternion.LookRotation(new Vector3(-dirToCamp.x, 0f, -dirToCamp.z));
+                Debug.Log($"[Bridge] near → {a[0]} #{nth} at {tp}");
+                return;
+            }
             if (cmd.StartsWith("tp "))
             {
                 // tp x z yaw : stand on the ground at (x, z) facing yaw degrees.
@@ -260,14 +293,19 @@ namespace FriendSlop.EditorTools
                 {
                     string path = System.IO.Path.Combine(Application.persistentDataPath, "profile.json");
                     if (System.IO.File.Exists(path)) System.IO.File.Copy(path, path + ".bak", true);
+                    else System.IO.File.WriteAllText(path + ".none", "no profile before the test");
                     Debug.Log($"[Bridge] profile backed up (exists={System.IO.File.Exists(path)})");
                     break;
                 }
                 case "profile-restore":
                 {
+                    // Only ever undo a matching backup: with no backup on record, the profile is left alone
+                    // (and a safety copy is always kept as profile.json.prev before anything is replaced).
                     string path = System.IO.Path.Combine(Application.persistentDataPath, "profile.json");
+                    if (System.IO.File.Exists(path)) System.IO.File.Copy(path, path + ".prev", true);
                     if (System.IO.File.Exists(path + ".bak")) { System.IO.File.Copy(path + ".bak", path, true); System.IO.File.Delete(path + ".bak"); }
-                    else if (System.IO.File.Exists(path)) System.IO.File.Delete(path); // there was no profile before the test
+                    else if (System.IO.File.Exists(path + ".none")) { if (System.IO.File.Exists(path)) System.IO.File.Delete(path); System.IO.File.Delete(path + ".none"); }
+                    else Debug.LogWarning("[Bridge] profile-restore: no backup on record, leaving the profile as is");
                     var f = typeof(FriendSlop.Profile.PlayerProfile).GetField("_current", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
                     f?.SetValue(null, null); // force reload from disk
                     Debug.Log($"[Bridge] profile restored → bucks={FriendSlop.Profile.PlayerProfile.Current.bucks} hat={FriendSlop.Profile.PlayerProfile.Current.hat}");
@@ -600,6 +638,9 @@ namespace FriendSlop.EditorTools
                               $"hunter={(hunter ? hunter.transform.localPosition.ToString("0.00") + " rot " + hunter.transform.localEulerAngles.ToString("0") : "-")} state={(anim ? anim.GetCurrentAnimatorStateInfo(0).shortNameHash.ToString() : "-")} speed={(anim ? anim.GetFloat("Speed").ToString("0.0") : "-")} grounded={(anim ? anim.GetBool("Grounded").ToString() : "-")}");
                     break;
                 }
+                case "art-dump-kenney":
+                    ArtInspector.Dump("Assets/_Game/ThirdParty/KenneyNature");
+                    break;
                 case "art-dump":
                     ArtInspector.Dump("Assets/_Game/ThirdParty/QuaterniusVillage");
                     ArtInspector.Bones("Assets/_Game/ThirdParty/KayKitAdventurers/Characters/Knight.fbx");
@@ -823,6 +864,28 @@ namespace FriendSlop.EditorTools
                     if (pw == null) { Debug.LogWarning("[Bridge] selftest-equip: no local player"); return; }
                     for (int i = pw.Catalog.Count - 1; i >= 0; i--) { pw.RequestEquip(i); if (pw.Equipped.Value == i) break; }
                     Debug.Log($"[Bridge] equip → {pw.Current?.displayName}");
+                    break;
+                }
+                case "selftest-shotgun":
+                {
+                    // One aimed shotgun blast at a zoo deer 18 m away (run selftest-giveall and selftest-zoo first).
+                    var pw = FriendSlop.Weapons.PlayerWeapons.Local;
+                    Animal deer = null; foreach (var a in _zoo) if (a && a.Species.displayName == "Deer" && !a.IsDead.Value) deer = a;
+                    if (pw == null || deer == null) { Debug.LogWarning("[Bridge] selftest-shotgun: giveall + zoo first"); return; }
+                    int sg = -1; for (int i = 0; i < pw.Catalog.Count; i++) if (pw.Catalog.Get(i).displayName == "Shotgun") sg = i;
+                    pw.RequestEquip(sg);
+                    var me = pw.transform.position; var fwd = pw.transform.forward; fwd.y = 0f; fwd.Normalize();
+                    deer.transform.position = me + fwd * 18f;
+                    var aim = deer.transform.position + Vector3.up * (deer.Species.legLength + deer.Species.bodyHeight * 0.5f) * deer.Species.scale;
+                    pw.TestFireAt(aim);
+                    Debug.Log($"[Bridge] shotgun fired at deer 18 m (equipped {pw.Current?.displayName})");
+                    break;
+                }
+                case "zoo-hp":
+                {
+                    var sb = new System.Text.StringBuilder("[Bridge] zoo hp →");
+                    foreach (var a in _zoo) if (a) sb.Append($" {a.Species.displayName}:{(a.IsDead.Value ? "dead" : a.HealthFraction.Value.ToString("0.00"))}");
+                    Debug.Log(sb.ToString());
                     break;
                 }
                 case "selftest-fireall":

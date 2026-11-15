@@ -49,7 +49,7 @@ namespace FriendSlop.EditorTools
             yield return ("Shotgun", w =>
             {
                 Name(w, "Shotgun", 180, "Eight pellets. The ultimate carcass-juggling tool.", WeaponModel.Shotgun);
-                Fire(w, WeaponKind.Hitscan, FireMode.Semi, 0.8f, 11f, 2f, spread: 7f, aimSpread: 5f, range: 45f);
+                Fire(w, WeaponKind.Hitscan, FireMode.Semi, 0.8f, 18f, 2f, spread: 4f, aimSpread: 2f, range: 60f);
                 w.pellets = 8;
                 Feel(w, ShotSound.HeavyGunshot, 0.8f, 0.9f, recoil: 7f, impulse: 7f, aimFov: 62f, noise: 40f);
             });
@@ -114,6 +114,12 @@ namespace FriendSlop.EditorTools
                     def = ScriptableObject.CreateInstance<WeaponDefinition>();
                     setup(def);
                     AssetDatabase.CreateAsset(def, path);
+                }
+                // v2 tuning: the shotgun was near useless (7° spread, 11 dmg pellets, 45 m on a much bigger map).
+                if (file == "Shotgun" && def.damage < 17f && def.spread > 3.9f)
+                {
+                    def.damage = 18f; def.spread = 4f; def.aimSpread = 2f; def.range = 60f;
+                    EditorUtility.SetDirty(def);
                 }
                 list.Add(def);
             }

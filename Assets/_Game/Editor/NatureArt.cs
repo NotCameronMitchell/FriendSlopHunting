@@ -196,6 +196,81 @@ namespace FriendSlop.EditorTools
                 mf.gameObject.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
         }
 
+        // ------------------------------------------------------------------ Kenney Nature Kit (CC0) outcrops
+
+        const string KenneyModels = "Assets/_Game/ThirdParty/KenneyNature/Models";
+        static readonly string[] KenneyRocks =
+        {
+            "rock_largeA", "rock_largeB", "rock_largeC", "rock_largeD", "rock_largeE", "rock_largeF",
+            "rock_tallA", "rock_tallB", "rock_tallC", "rock_tallD", "rock_tallE", "rock_tallF", "rock_tallG", "rock_tallH", "rock_tallI", "rock_tallJ",
+        };
+        static readonly string[] KenneyCliffs = { "cliff_large_rock", "cliff_rock", "cliff_top_rock", "cliff_block_rock", "cliff_diagonal_rock", "cliff_half_rock" };
+        static Material _kRock, _kRockDark, _kMoss;
+
+        static Material KenneyMat(string name, Color c, float smooth)
+        {
+            string path = $"Assets/_Game/Materials/{name}.mat";
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (m == null) { m = new Material(Shader.Find("Universal Render Pipeline/Lit")); AssetDatabase.CreateAsset(m, path); }
+            m.SetColor("_BaseColor", c); m.color = c; m.SetFloat("_Smoothness", smooth);
+            EditorUtility.SetDirty(m);
+            return m;
+        }
+
+        /// <summary>Triplanar rock using the terrain's own rock + grass textures, so outcrops match the slopes.</summary>
+        static Material RockTriplanarMat(string name, Color tint, float moss)
+        {
+            var shader = Shader.Find("FriendSlop/RockTriplanar");
+            if (shader == null) return KenneyMat(name, tint * 0.5f, 0.06f);
+            string path = $"Assets/_Game/Materials/{name}.mat";
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (m == null) { m = new Material(shader); AssetDatabase.CreateAsset(m, path); }
+            m.shader = shader;
+            m.SetTexture("_MainTex", AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/_Game/Materials/Ground/Rock.png"));
+            m.SetTexture("_MossTex", AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/_Game/Materials/Ground/Grass.png"));
+            m.SetColor("_Tint", tint); m.SetColor("_MossTint", new Color(0.85f, 0.9f, 0.8f));
+            m.SetFloat("_Scale", 0.12f); m.SetFloat("_Moss", moss);
+            m.enableInstancing = true;
+            EditorUtility.SetDirty(m);
+            return m;
+        }
+
+        /// <summary>
+        /// A mountain outcrop from the Kenney Nature Kit, scaled up and recoloured to match our rock (grey body, darker
+        /// stone, mossy tops). Rocks get any yaw; cliff slabs turn their face downhill so they read as rock bands.
+        /// </summary>
+        public static void Outcrop(Transform parent, Vector3 pos, Vector3 downhill, bool cliff, System.Random rng, float sizeMul = 1f)
+        {
+            _kRock ??= RockTriplanarMat("KenneyRock", new Color(1f, 0.98f, 0.96f), 0.35f);
+            _kRockDark ??= RockTriplanarMat("KenneyRockDark", new Color(0.78f, 0.77f, 0.8f), 0.2f);
+            _kMoss ??= RockTriplanarMat("KenneyMoss", new Color(0.95f, 0.95f, 0.92f), 1f);
+            string name = cliff ? KenneyCliffs[rng.Next(KenneyCliffs.Length)] : KenneyRocks[rng.Next(KenneyRocks.Length)];
+            var src = AssetDatabase.LoadAssetAtPath<GameObject>($"{KenneyModels}/{name}.fbx");
+            if (src == null) { Debug.LogWarning($"[Nature] missing Kenney model {name}"); return; }
+            float R(float a, float b) => a + (float)rng.NextDouble() * (b - a);
+            float s = (cliff ? R(7f, 13f) : R(5f, 13f)) * sizeMul;
+            float yaw = cliff && downhill.sqrMagnitude > 0.001f ? Mathf.Atan2(downhill.x, downhill.z) * Mathf.Rad2Deg + 180f + R(-20f, 20f) : R(0f, 360f);
+            var go = new GameObject(cliff ? "Cliff" : "Outcrop");
+            go.transform.SetParent(parent, false);
+            go.transform.SetPositionAndRotation(pos, Quaternion.Euler(R(-8f, 8f), yaw, R(-8f, 8f)));
+            go.transform.localScale = new Vector3(s, s * R(0.8f, 1.35f), s);
+            var inst = (GameObject)PrefabUtility.InstantiatePrefab(src, go.transform);
+            foreach (var r in inst.GetComponentsInChildren<Renderer>())
+            {
+                var mats = r.sharedMaterials;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    string n = mats[i] ? mats[i].name.ToLowerInvariant() : "";
+                    mats[i] = n.Contains("grass") ? _kMoss : n.Contains("default") ? _kRockDark : _kRock;
+                }
+                r.sharedMaterials = mats;
+            }
+            foreach (var mf in inst.GetComponentsInChildren<MeshFilter>())
+                mf.gameObject.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
+            var flags = StaticEditorFlags.ContributeGI | StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic | StaticEditorFlags.ReflectionProbeStatic;
+            foreach (var t in go.GetComponentsInChildren<Transform>(true)) GameObjectUtility.SetStaticEditorFlags(t.gameObject, flags);
+        }
+
         /// <summary>A big boulder or outcrop for the mountainsides: a medium rock scaled up, tilted, partly buried.</summary>
         public static void Boulder(Transform parent, Vector3 pos, System.Random rng, float sizeMul = 1f)
         {

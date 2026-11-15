@@ -151,17 +151,50 @@ namespace FriendSlop.Game
             AnnounceRpc(announcement);
         }
 
-        /// <summary>Raised on every peer when a Lucky Lodge station resolves a bet: (station, a, b, c, payout).</summary>
-        public static event System.Action<int, int, int, int, int> GambleResult;
+        /// <summary>Raised on every peer when a Lucky Lodge station resolves a bet: (station, a, b, c, payout, info, stake).</summary>
+        public static event System.Action<int, int, int, int, int, int, int> GambleResult;
+        /// <summary>Raised on every peer for in-progress station actions (e.g. "scratch the next panel").</summary>
+        public static event System.Action<int, int> GambleAction;
+
+        /// <summary>Lucky Lodge progressive jackpot: every bet feeds it; three golden antlers on the slots win it.</summary>
+        public readonly NetworkVariable<int> LodgeJackpot = new NetworkVariable<int>(JackpotSeed);
+        public const int JackpotSeed = 500;
 
         /// <summary>Server: tell everyone how a gamble turned out (they animate it; the station pays out after).</summary>
-        public void ServerGambleResult(int station, int a, int b, int c, int payout)
+        public void ServerGambleResult(int station, int a, int b, int c, int payout, int info, int stake)
         {
-            if (IsServer) GambleResultRpc(station, a, b, c, payout);
+            if (IsServer) GambleResultRpc(station, a, b, c, payout, info, stake);
         }
 
         [Rpc(SendTo.Everyone)]
-        void GambleResultRpc(int station, int a, int b, int c, int payout) => GambleResult?.Invoke(station, a, b, c, payout);
+        void GambleResultRpc(int station, int a, int b, int c, int payout, int info, int stake) => GambleResult?.Invoke(station, a, b, c, payout, info, stake);
+
+        /// <summary>Client: bet team money at a Lucky Lodge station (option = which bet, e.g. roulette colour).</summary>
+        public void RequestGambleBet(int station, int option, int amount) => GambleBetRpc(station, option, amount);
+
+        [Rpc(SendTo.Server)]
+        void GambleBetRpc(int station, int option, int amount, RpcParams rpcParams = default)
+        {
+            foreach (var s in FriendSlop.World.GambleStation.All)
+                if (s.id == station) { s.ServerBetMoney(rpcParams.Receive.SenderClientId, option, amount); return; }
+        }
+
+        /// <summary>Client: poke a station mid-game (scratch the next panel now).</summary>
+        public void RequestGambleAction(int station, int action) => GambleActionServerRpc(station, action);
+
+        [Rpc(SendTo.Server)]
+        void GambleActionServerRpc(int station, int action) => GambleActionRpc(station, action);
+
+        [Rpc(SendTo.Everyone)]
+        void GambleActionRpc(int station, int action) => GambleAction?.Invoke(station, action);
+
+        /// <summary>Server: pay a gamble win into the pot (without counting it as an animal sold).</summary>
+        public void ServerPayGamble(int amount, string announcement)
+        {
+            if (!IsServer) return;
+            Money.Value += amount;
+            AnnounceRpc(announcement);
+        }
 
         /// <summary>Server only: broadcast a message to every player's HUD.</summary>
         public void ServerAnnounce(string announcement)

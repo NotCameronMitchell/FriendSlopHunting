@@ -542,6 +542,7 @@ namespace FriendSlop.Player
                 return;
             }
 
+            GambleBetSpot.Focused = false;
             var target = LookAtCarryable();
             if (target == null)
             {
@@ -562,6 +563,17 @@ namespace FriendSlop.Player
                     bool night = FriendSlop.World.DayNightCycle.NightNow;
                     LocalHint = night ? "E sleep (everyone sleeping skips the night)" : "Beds are for nights. Come back after dark.";
                     if (night && controlling && Controls.Pressed(GameAction.Interact)) GoToSleep(bed);
+                }
+                else if (LookAt<GambleBetSpot>(GambleBetSpot.InteractRange) is GambleBetSpot betSpot)
+                {
+                    GambleBetSpot.Focused = true;
+                    if (controlling && UnityEngine.InputSystem.Mouse.current != null)
+                    {
+                        float scroll = UnityEngine.InputSystem.Mouse.current.scroll.ReadValue().y;
+                        if (Mathf.Abs(scroll) > 0.01f) GambleBetSpot.ChangeBet(scroll > 0f ? 1 : -1);
+                    }
+                    LocalHint = betSpot.Hint();
+                    if (controlling && Controls.Pressed(GameAction.Interact)) betSpot.Use();
                 }
                 else if (LookAt<LootCrate>(LootCrate.InteractRange) is LootCrate crate)
                 {

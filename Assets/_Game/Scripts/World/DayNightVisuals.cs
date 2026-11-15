@@ -166,7 +166,7 @@ namespace FriendSlop.World
         Transform[] _clouds = System.Array.Empty<Transform>();
         Material _cloudMat;
         static readonly Vector3 Wind = new Vector3(2.4f, 0f, 0.9f);
-        const float CloudWrap = 620f;
+        const float CloudWrap = 700f;
 
         /// <summary>Puffy clouds drifting over the valley: each one is a handful of squashed spheres merged into one mesh.</summary>
         void BuildClouds()
@@ -179,9 +179,9 @@ namespace FriendSlop.World
             var rng = new System.Random(4242);
             float R(float a, float b) => a + (float)rng.NextDouble() * (b - a);
             var list = new System.Collections.Generic.List<Transform>();
-            for (int c = 0; c < 30; c++)
+            for (int c = 0; c < 34; c++)
             {
-                float size = R(22f, 60f);
+                float size = R(40f, 95f);
                 int puffs = 5 + rng.Next(7);
                 var combine = new CombineInstance[puffs];
                 for (int p = 0; p < puffs; p++)
@@ -195,7 +195,7 @@ namespace FriendSlop.World
                 mesh.CombineMeshes(combine, true, true);
                 var go = new GameObject("Cloud");
                 go.transform.SetParent(transform, false);
-                go.transform.position = new Vector3(R(-CloudWrap, CloudWrap), R(118f, 170f), R(-CloudWrap, CloudWrap));
+                go.transform.position = new Vector3(R(-CloudWrap, CloudWrap), R(232f, 300f), R(-CloudWrap, CloudWrap));
                 go.transform.rotation = Quaternion.Euler(0f, R(-25f, 25f) + 20f, 0f);
                 go.AddComponent<MeshFilter>().sharedMesh = mesh;
                 var r = go.AddComponent<MeshRenderer>();

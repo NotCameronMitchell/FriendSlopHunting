@@ -134,6 +134,17 @@ namespace FriendSlop.EditorTools
             Mat("Smoke", lit, new Color(0.5f, 0.5f, 0.53f));
             Mat("Ash", lit, new Color(0.16f, 0.15f, 0.15f));
             Mat("Mud", lit, new Color(0.3f, 0.21f, 0.14f));
+            Mat("CasinoRed", lit, new Color(0.72f, 0.1f, 0.12f));
+            Mat("CasinoBlack", lit, new Color(0.08f, 0.08f, 0.09f));
+            Mat("CasinoGreen", lit, new Color(0.08f, 0.5f, 0.22f));
+            Mat("Gold", lit, new Color(1f, 0.76f, 0.24f));
+            Mat("Chrome", lit, new Color(0.82f, 0.84f, 0.88f));
+            Mat("ReelFace", lit, new Color(0.98f, 0.96f, 0.9f));
+            Mat("Felt", lit, new Color(0.08f, 0.38f, 0.2f));
+            Mat("Foil", lit, new Color(0.74f, 0.76f, 0.8f));
+            Mat("Bulb", unlit, new Color(1f, 0.9f, 0.6f));
+            Mat("Payline", unlit, new Color(1f, 0.2f, 0.15f));
+            foreach (var shiny in new[] { "Gold", "Chrome", "Foil" }) { Mats[shiny].SetFloat("_Metallic", 0.75f); Mats[shiny].SetFloat("_Smoothness", 0.7f); }
             Mat("MudWet", lit, new Color(0.2f, 0.14f, 0.1f));
             Mat("HogPink", lit, new Color(0.9f, 0.6f, 0.62f));
             Mat("Canvas", lit, new Color(0.74f, 0.68f, 0.52f));
@@ -221,6 +232,7 @@ namespace FriendSlop.EditorTools
 
             var cam = pivot.gameObject.AddComponent<Camera>();
             cam.nearClipPlane = 0.05f;
+            cam.farClipPlane = 1300f; // the clouds and the far ranges live out there
             cam.fieldOfView = 75f;
             cam.depth = 10f;
             cam.enabled = false; // only the owner's camera turns on
@@ -417,17 +429,41 @@ namespace FriendSlop.EditorTools
             }
             void Settle(Transform t, float embedFrac)
             {
-                var rends = t.GetComponentsInChildren<Renderer>();
-                if (rends.Length == 0) return;
-                var b = rends[0].bounds;
-                for (int k = 1; k < rends.Length; k++) b.Encapsulate(rends[k].bounds);
-                // Lowest ground under the footprint (corners pulled in a bit: round shapes don't fill their box).
-                Vector3 c = b.center, e = b.extents * 0.7f;
-                float g = GroundY(c);
-                g = Mathf.Min(g, GroundY(c + new Vector3(e.x, 0f, e.z)), GroundY(c + new Vector3(-e.x, 0f, e.z)));
-                g = Mathf.Min(g, GroundY(c + new Vector3(e.x, 0f, -e.z)), GroundY(c + new Vector3(-e.x, 0f, -e.z)));
-                float embed = Mathf.Clamp(b.size.y * embedFrac, 0.02f, 0.3f);
-                t.position += Vector3.up * (g - embed - b.min.y);
+                // Use the real mesh, not its bounding box (a tilted, scaled rock's box sits well below the rock):
+                // push every vertex in the bottom third down to the ground under it, then sink a little more.
+                var pts = new List<Vector3>();
+                float minY = float.MaxValue, maxY = float.MinValue;
+                foreach (var mf in t.GetComponentsInChildren<MeshFilter>())
+                {
+                    var mesh = mf.sharedMesh;
+                    if (mesh == null) continue; // (editor scripts can read any mesh)
+                    var verts = mesh.vertices;
+                    int step = Mathf.Max(1, verts.Length / 400);
+                    for (int k = 0; k < verts.Length; k += step)
+                    {
+                        var w = mf.transform.TransformPoint(verts[k]);
+                        pts.Add(w);
+                        minY = Mathf.Min(minY, w.y); maxY = Mathf.Max(maxY, w.y);
+                    }
+                }
+                if (pts.Count == 0)
+                {
+                    // Fallback: renderer bounds and the lowest ground under the footprint.
+                    var rends = t.GetComponentsInChildren<Renderer>();
+                    if (rends.Length == 0) return;
+                    var b = rends[0].bounds;
+                    for (int k = 1; k < rends.Length; k++) b.Encapsulate(rends[k].bounds);
+                    Vector3 c = b.center, e = b.extents * 0.7f;
+                    float g = Mathf.Min(GroundY(c), GroundY(c + new Vector3(e.x, 0f, e.z)), GroundY(c + new Vector3(-e.x, 0f, e.z)));
+                    g = Mathf.Min(g, GroundY(c + new Vector3(e.x, 0f, -e.z)), GroundY(c + new Vector3(-e.x, 0f, -e.z)));
+                    t.position += Vector3.up * (g - Mathf.Clamp(b.size.y * embedFrac, 0.02f, 0.3f) - b.min.y);
+                    return;
+                }
+                float height = maxY - minY, cut = minY + height * 0.35f;
+                float gap = float.MinValue; // how high the worst bottom point hangs above the ground beneath it
+                foreach (var p in pts) if (p.y <= cut) gap = Mathf.Max(gap, p.y - GroundY(p));
+                float sink = Mathf.Clamp(height * embedFrac, 0.02f, 0.8f);
+                t.position -= Vector3.up * (gap + sink);
             }
             float Steep(Vector3 p) => terrain.terrainData.GetSteepness(
                 Mathf.Clamp01((p.x + TerrainBuilder.Half) / (TerrainBuilder.Half * 2f)), Mathf.Clamp01((p.z + TerrainBuilder.Half) / (TerrainBuilder.Half * 2f)));
@@ -479,6 +515,22 @@ namespace FriendSlop.EditorTools
                 if (st < 18f || st > 60f) continue;
                 p.y = GroundY(p);
                 NatureArt.Boulder(boulders, p, rng, ring > MapHalfSize ? 1.6f : 1f);
+                placed++;
+            }
+            // Kenney Nature Kit outcrops and cliff bands on the steeper mountain faces (beyond the walk ring).
+            for (int i = 0, placed = 0; i < 12000 && placed < 260; i++)
+            {
+                float bh = TerrainBuilder.Half - 12f;
+                var p = new Vector3(((float)rng.NextDouble() * 2f - 1f) * bh, 0f, ((float)rng.NextDouble() * 2f - 1f) * bh);
+                float ring = Mathf.Pow(Mathf.Pow(Mathf.Abs(p.x), 4f) + Mathf.Pow(Mathf.Abs(p.z), 4f), 0.25f);
+                if (ring < 170f || TerrainBuilder.NearWater(p, 6f) || NearLandmark(p, 10f) || NearTotem(p)) continue;
+                float st = Steep(p);
+                if (st < 26f || st > 70f) continue;
+                p.y = GroundY(p);
+                var downhill = new Vector3(GroundY(p + Vector3.left * 2f) - GroundY(p + Vector3.right * 2f), 0f,
+                                           GroundY(p + Vector3.back * 2f) - GroundY(p + Vector3.forward * 2f));
+                bool cliff = st > 38f && rng.NextDouble() < 0.55;
+                NatureArt.Outcrop(boulders, p, downhill, cliff, rng, ring > MapHalfSize ? 1.5f : 1f);
                 placed++;
             }
             foreach (Transform t in boulders) Settle(t, 0.22f);
@@ -926,6 +978,7 @@ namespace FriendSlop.EditorTools
             BuildSlots(lodge, new Vector3(-4.2f, 0.06f, -1.4f), 0);
             BuildRoulette(lodge, new Vector3(0f, 0.06f, -1.1f), 1);
             BuildScratchers(lodge, new Vector3(4.2f, 0.06f, -1.4f), 2);
+            LodgeJackpot(lodge);
         }
 
         static GambleStation Pad(Transform lodge, Vector3 machinePos, int id, GambleGame game, string padMat, out Transform pad)
@@ -942,74 +995,6 @@ namespace FriendSlop.EditorTools
             station.game = game;
             station.id = id;
             return station;
-        }
-
-        static void BuildSlots(Transform lodge, Vector3 at, int id)
-        {
-            var m = new GameObject("SlotMachine").transform;
-            m.SetParent(lodge, false);
-            m.localPosition = at;
-            Solid(m, "Cabinet", new Vector3(0f, 1.0f, 0f), new Vector3(1.6f, 2.0f, 0.9f), "Roof");
-            Visual(PrimitiveType.Cube, "Trim", m, new Vector3(0f, 2.05f, 0.05f), new Vector3(1.7f, 0.18f, 1.0f), "SellPad");
-            Visual(PrimitiveType.Cube, "Screen", m, new Vector3(0f, 1.35f, 0.46f), new Vector3(1.35f, 0.55f, 0.04f), "Gun");
-            Visual(PrimitiveType.Cylinder, "Lever", m, new Vector3(0.95f, 1.35f, 0.1f), new Vector3(0.07f, 0.35f, 0.07f), "Stone");
-            Visual(PrimitiveType.Sphere, "Knob", m, new Vector3(0.95f, 1.72f, 0.1f), Vector3.one * 0.18f, "Glow");
-            var station = Pad(lodge, at, id, GambleGame.Slots, "SellPad", out _);
-            station.displays = new[]
-            {
-                Text3D(m, "RABBIT", new Vector3(-0.44f, 1.35f, 0.5f), 0.017f, Color.white),
-                Text3D(m, "DUCK", new Vector3(0f, 1.35f, 0.5f), 0.017f, Color.white),
-                Text3D(m, "GOOSE", new Vector3(0.44f, 1.35f, 0.5f), 0.017f, Color.white),
-            };
-            station.status = Text3D(m, "SLOTS", new Vector3(0f, 2.55f, 0.3f), 0.09f, new Color(1f, 0.85f, 0.3f));
-        }
-
-        static void BuildRoulette(Transform lodge, Vector3 at, int id)
-        {
-            var m = new GameObject("Roulette").transform;
-            m.SetParent(lodge, false);
-            m.localPosition = at;
-            Solid(m, "Table", new Vector3(0f, 0.45f, 0f), new Vector3(2.4f, 0.9f, 1.6f), "Plank");
-            Visual(PrimitiveType.Cube, "Felt", m, new Vector3(0f, 0.91f, 0f), new Vector3(2.3f, 0.02f, 1.5f), "Leaves");
-            var wheel = new GameObject("Wheel").transform;
-            wheel.SetParent(m, false);
-            wheel.localPosition = new Vector3(0f, 0.95f, 0f);
-            Visual(PrimitiveType.Cylinder, "Rim", wheel, Vector3.zero, new Vector3(1.25f, 0.04f, 1.25f), "Bark");
-            for (int i = 0; i < 12; i++)
-            {
-                float a = i * 30f;
-                var wedge = Visual(PrimitiveType.Cube, "Wedge", wheel, Quaternion.Euler(0f, a, 0f) * new Vector3(0f, 0.04f, 0.38f), new Vector3(0.18f, 0.03f, 0.42f), i == 0 ? "Leaves" : i % 2 == 0 ? "Roof" : "Gun");
-                wedge.transform.localRotation = Quaternion.Euler(0f, a, 0f);
-            }
-            Visual(PrimitiveType.Sphere, "Hub", wheel, new Vector3(0f, 0.08f, 0f), Vector3.one * 0.2f, "SellPad");
-            var station = Pad(lodge, at + new Vector3(0f, 0f, 0.2f), id, GambleGame.Roulette, null, out var pad);
-            // Bet by where the carcass lands: RED half (your left), BLACK half (your right), green bullseye.
-            Visual(PrimitiveType.Cube, "Red", pad, new Vector3(0.45f, 0.08f, 0f), new Vector3(0.9f, 0.06f, 1.8f), "Roof");
-            Visual(PrimitiveType.Cube, "Black", pad, new Vector3(-0.45f, 0.08f, 0f), new Vector3(0.9f, 0.06f, 1.8f), "Gun");
-            Visual(PrimitiveType.Cylinder, "Green", pad, new Vector3(0f, 0.1f, 0f), new Vector3(0.9f, 0.03f, 0.9f), "Leaves");
-            Text3D(pad, "RED", new Vector3(0.5f, 0.2f, -0.75f), 0.05f, Color.white);
-            Text3D(pad, "BLACK", new Vector3(-0.5f, 0.2f, -0.75f), 0.05f, Color.white);
-            station.wheel = wheel;
-            station.displays = new[] { Text3D(m, "PLACE YOUR BETS", new Vector3(0f, 1.7f, 0f), 0.06f, Color.white) };
-            station.status = Text3D(m, "ROULETTE", new Vector3(0f, 2.3f, 0f), 0.09f, new Color(1f, 0.85f, 0.3f));
-        }
-
-        static void BuildScratchers(Transform lodge, Vector3 at, int id)
-        {
-            var m = new GameObject("Scratchers").transform;
-            m.SetParent(lodge, false);
-            m.localPosition = at;
-            Solid(m, "Booth", new Vector3(0f, 0.55f, 0f), new Vector3(1.8f, 1.1f, 0.8f), "Trader");
-            Visual(PrimitiveType.Cube, "Board", m, new Vector3(0f, 1.75f, -0.2f), new Vector3(1.9f, 1.0f, 0.08f), "Plank");
-            var station = Pad(lodge, at, id, GambleGame.Scratchers, "Trader", out _);
-            var panels = new TextMesh[3];
-            for (int i = 0; i < 3; i++)
-            {
-                Visual(PrimitiveType.Cube, "Panel", m, new Vector3(-0.6f + i * 0.6f, 1.75f, -0.15f), new Vector3(0.5f, 0.5f, 0.03f), "Stone");
-                panels[i] = Text3D(m, "?", new Vector3(-0.6f + i * 0.6f, 1.75f, -0.12f), 0.022f, Color.gray);
-            }
-            station.displays = panels;
-            station.status = Text3D(m, "SCRATCHERS", new Vector3(-0.35f, 2.55f, -0.2f), 0.06f, new Color(1f, 0.85f, 0.3f));
         }
 
         /// <summary>Depth-tested world text facing out of the parent's front (+Z), readable by someone standing in front.</summary>
