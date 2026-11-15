@@ -33,6 +33,37 @@ namespace FriendSlop.Game
         public static event Action<string> Announced;
 
         [SerializeField] WeaponCatalog catalog;
+        [SerializeField] GameObject tankPrefab;
+        [SerializeField] Vector3 garagePosition = new Vector3(-12f, 0f, -14f);
+        [SerializeField] float garageYaw = 0f;
+        public const int TankPrice = 2500;
+
+        /// <summary>Ask for the team tank: buys it (team money), or recalls an empty one to the garage for free.</summary>
+        public void RequestTank() => TankRpc();
+
+        [Rpc(SendTo.Server)]
+        void TankRpc(RpcParams rpcParams = default)
+        {
+            string who = PlayerName(rpcParams.Receive.SenderClientId);
+            var spot = new Vector3(garagePosition.x, FriendSlop.World.Ground.HeightAt(garagePosition) + 0.6f, garagePosition.z);
+            if (FriendSlop.World.Tank.All.Count > 0)
+            {
+                var t = FriendSlop.World.Tank.All[0];
+                for (int i = 0; i < FriendSlop.World.Tank.Seats; i++)
+                    if (t.Occupant(i) != FriendSlop.World.Tank.Empty) { AnnounceRpc("Someone's in the tank. Can't recall it now!"); return; }
+                var rb = t.GetComponent<Rigidbody>();
+                rb.linearVelocity = Vector3.zero; rb.angularVelocity = Vector3.zero;
+                rb.position = spot; rb.rotation = Quaternion.Euler(0f, garageYaw, 0f);
+                t.transform.SetPositionAndRotation(spot, Quaternion.Euler(0f, garageYaw, 0f));
+                AnnounceRpc($"{who} called the tank back to the garage.");
+                return;
+            }
+            if (tankPrefab == null) return;
+            if (!ServerTrySpend(TankPrice)) { AnnounceRpc($"{who} can't afford the tank (${TankPrice:N0}). Go hunt!"); return; }
+            var go = Instantiate(tankPrefab, spot, Quaternion.Euler(0f, garageYaw, 0f));
+            go.GetComponent<NetworkObject>().Spawn(true);
+            AnnounceRpc($"{who} bought a TANK! It's waiting at the garage.");
+        }
         public WeaponCatalog Catalog => catalog;
 
         public static string PlayerName(ulong clientId) =>

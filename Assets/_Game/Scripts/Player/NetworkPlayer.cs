@@ -35,6 +35,15 @@ namespace FriendSlop.Player
             NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
         FriendSlop.World.Bed _bed;
 
+        // Tank seat (every peer tracks it so the body can sit; the owner also drives the camera/position).
+        Tank _tank;
+        int _tankSeat = -1;
+        public int TankSeat => _tankSeat;
+        public Tank CurrentTank => _tank;
+        public bool InTank => _tankSeat >= 0;
+        /// <summary>Driver or gunner: the cannon replaces personal guns.</summary>
+        public bool InTankControl => _tankSeat == 0 || _tankSeat == 1;
+
         /// <summary>Tint the body (from the player's chosen color).</summary>
         public void SetBodyColor(Color color)
         {
@@ -197,6 +206,62 @@ namespace FriendSlop.Player
             SetCursorLocked(false);
         }
 
+        // ------------------------------ Tank ------------------------------
+
+        void TrackTankSeat()
+        {
+            Tank tank = null; int seat = -1;
+            foreach (var t in Tank.All) { int s = t.SeatOf(OwnerClientId); if (s >= 0) { tank = t; seat = s; break; } }
+            if (seat == _tankSeat && tank == _tank) return;
+            var left = _tank;
+            _tank = tank; _tankSeat = seat;
+            var hunter = GetComponentInChildren<HunterBody>();
+            if (hunter) hunter.Seated = seat >= 0;
+            if (!IsOwner) return;
+            if (seat >= 0)
+            {
+                if (_held != null) Release(Vector3.zero);
+                _cc.enabled = false;
+                // Driver/gunner watch from a chase camera, so show your own hunter.
+                if (hunter) hunter.SetShadowOnly(seat >= 2);
+            }
+            else
+            {
+                // Hop out beside the tank.
+                Vector3 at = left ? left.transform.position + left.transform.right * 3.2f : transform.position;
+                at.y = Ground.HeightAt(at) + 0.2f;
+                transform.position = at;
+                _cc.enabled = true;
+                _verticalVelocity = 0f;
+                if (cameraPivot) { cameraPivot.localPosition = _pivotRestPos; cameraPivot.localRotation = Quaternion.identity; }
+                _pitch = 0f;
+                if (hunter) hunter.SetShadowOnly(true);
+            }
+        }
+
+        /// <summary>Owner, after the tank moved: sit in the seat; driver/gunner get a chase camera behind the turret.</summary>
+        void RideTank()
+        {
+            var seatPoint = _tank.SeatPoint(_tankSeat);
+            transform.position = seatPoint.position;
+            if (_tankSeat < 2)
+            {
+                transform.rotation = Quaternion.Euler(0f, seatPoint.eulerAngles.y, 0f);
+                var aim = _tank.Turret ? _tank.Turret : _tank.transform;
+                Vector3 fwd = Vector3.ProjectOnPlane(aim.forward, Vector3.up).normalized;
+                Vector3 pivot = aim.position + Vector3.up * 1.2f;
+                Vector3 cam = aim.position - fwd * 9f + Vector3.up * 4f;
+                // Pull the camera in if a roof, tree or wall is in the way (ignore the tank itself).
+                var dir = cam - pivot;
+                foreach (var hit in Physics.SphereCastAll(pivot, 0.35f, dir.normalized, dir.magnitude, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    if (hit.collider.transform.IsChildOf(_tank.transform) || hit.distance <= 0f) continue;
+                    if (hit.distance < (cam - pivot).magnitude) cam = pivot + dir.normalized * Mathf.Max(1.5f, hit.distance - 0.2f);
+                }
+                if (cameraPivot) cameraPivot.SetPositionAndRotation(cam, Quaternion.LookRotation(aim.position + fwd * 14f + Vector3.up * 0.5f - cam));
+            }
+        }
+
         // ------------------------------ Sleeping ------------------------------
 
         void GoToSleep(FriendSlop.World.Bed bed)
@@ -241,6 +306,7 @@ namespace FriendSlop.Player
         {
             if (!IsSpawned) return;
             UpdateFootsteps();
+            TrackTankSeat();
             if (!IsOwner) return;
 
             if (Keyboard.current == null || Mouse.current == null) return;
@@ -253,6 +319,21 @@ namespace FriendSlop.Player
             }
 
             if (Controls.Pressed(GameAction.ToggleMute)) GameSettings.MicMuted = !GameSettings.MicMuted;
+
+            if (_tankSeat >= 0 && !GameMenus.AnyOpen)
+            {
+                if (Controls.Pressed(GameAction.Pause)) { GameMenus.Show(GameMenus.Menu.Pause); return; }
+                if (Controls.Pressed(GameAction.Interact)) { _tank.RequestExit(); return; }
+                if (Cursor.lockState != CursorLockMode.Locked && Mouse.current.leftButton.wasPressedThisFrame) SetCursorLocked(true);
+                string[] roles = { "DRIVER: WASD drive", "GUNNER: mouse aim, click fire", "RIDER: shoot from the deck", "RIDER: shoot from the deck" };
+                LocalHint = roles[_tankSeat] + (_tankSeat == 0 && _tank.Occupant(1) == Tank.Empty ? " · mouse aim, click fire" : "") + " · E hop out";
+                if (_tankSeat >= 2 && Cursor.lockState == CursorLockMode.Locked)
+                {
+                    Look(Mouse.current.delta.ReadValue());
+                    if (cameraPivot) cameraPivot.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
+                }
+                return;
+            }
 
             if (Sleeping.Value)
             {
@@ -331,6 +412,7 @@ namespace FriendSlop.Player
 
         void LateUpdate()
         {
+            if (IsOwner && _tankSeat >= 0 && _tank) { RideTank(); return; }
             if (IsOwner && _held != null && holdPoint)
                 _held.FollowHoldPoint(holdPoint);
         }
@@ -347,6 +429,7 @@ namespace FriendSlop.Player
 
         void Move(bool controlling)
         {
+            if (!_cc.enabled) return; // seated or asleep
             Vector2 input = Vector2.zero;
             if (controlling)
             {
@@ -439,6 +522,11 @@ namespace FriendSlop.Player
                     bool have = TryGetComponent(out PlayerWeapons pw) && pw.Owns(pickup.WeaponIndex.Value);
                     LocalHint = have ? $"You already have a {pickup.Definition.displayName}" : $"E pick up {pickup.Definition.displayName}";
                     if (!have && controlling && Controls.Pressed(GameAction.Interact)) pickup.RequestPickup();
+                }
+                else if (LookAt<Tank>(Tank.InteractRange) is Tank tank)
+                {
+                    LocalHint = tank.Full ? "The tank is full" : "E climb into the tank";
+                    if (!tank.Full && controlling && Controls.Pressed(GameAction.Interact)) tank.RequestEnter();
                 }
                 else if (LookAt<FriendSlop.World.Bed>(FriendSlop.World.Bed.InteractRange) is FriendSlop.World.Bed bed)
                 {

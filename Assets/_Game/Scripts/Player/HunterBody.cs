@@ -39,6 +39,9 @@ namespace FriendSlop.Player
 
         public Transform HatAnchor => hatAnchor;
 
+        /// <summary>Riding in a vehicle: idle pose instead of running with the vehicle speed.</summary>
+        public bool Seated { get; set; }
+
         void Awake()
         {
             if (animator && animator.runtimeAnimatorController == null)
@@ -127,9 +130,9 @@ namespace FriendSlop.Player
             var v = (pos - _lastPos) / dt;
             _lastPos = pos;
             v.y = 0f;
-            _speed = Mathf.Lerp(_speed, v.magnitude, 1f - Mathf.Exp(-12f * dt));
+            _speed = Mathf.Lerp(_speed, Seated ? 0f : v.magnitude, 1f - Mathf.Exp(-12f * dt));
             animator.SetFloat(SpeedId, _speed);
-            bool grounded = Physics.Raycast(pos + Vector3.up * 0.3f, Vector3.down, 0.55f, ~0, QueryTriggerInteraction.Ignore);
+            bool grounded = Seated || Physics.Raycast(pos + Vector3.up * 0.3f, Vector3.down, 0.55f, ~0, QueryTriggerInteraction.Ignore);
             animator.SetBool(GroundedId, grounded);
         }
 

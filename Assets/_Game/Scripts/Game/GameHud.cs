@@ -146,6 +146,7 @@ namespace FriendSlop.Game
             DrawWeaponBar();
             DrawSurvival();
             DrawSleep();
+            DrawTank();
 
             // Hit marker over the crosshair.
             if (Time.unscaledTime < _hitMarkerUntil)
@@ -203,6 +204,27 @@ namespace FriendSlop.Game
                 }
             }
             GUI.color = prevColor;
+        }
+
+        /// <summary>Crew role and cannon reload bar for whoever is aiming the tank.</summary>
+        void DrawTank()
+        {
+            var me = NetworkPlayer.Local;
+            if (me == null || !me.InTank || me.CurrentTank == null) return;
+            var tank = me.CurrentTank;
+            _white ??= Texture2D.whiteTexture;
+            int crew = 0; for (int i = 0; i < FriendSlop.World.Tank.Seats; i++) if (tank.Occupant(i) != FriendSlop.World.Tank.Empty) crew++;
+            Shadowed(new Rect(Screen.width / 2f - 200, Screen.height - 170, 400, 24), $"TANK  ·  crew {crew}/{FriendSlop.World.Tank.Seats}", _hint);
+            if (me.TankSeat != tank.AimerSeat) return;
+            var bar = new Rect(Screen.width / 2f - 120, Screen.height - 145, 240, 14);
+            var prev = GUI.color;
+            GUI.color = new Color(0f, 0f, 0f, 0.55f); GUI.DrawTexture(bar, _white);
+            float f = tank.ReloadFraction;
+            GUI.color = f >= 1f ? new Color(1f, 0.6f, 0.2f) : new Color(0.6f, 0.6f, 0.6f);
+            GUI.DrawTexture(new Rect(bar.x + 2, bar.y + 2, (bar.width - 4) * f, bar.height - 4), _white);
+            GUI.color = prev;
+            var c = new Vector2(Screen.width / 2f, Screen.height / 2f - 40);
+            GUI.Label(new Rect(c.x - 10, c.y - 12, 20, 24), "+");
         }
 
         /// <summary>Eyes closed while sleeping, with how many hunters are in bed.</summary>

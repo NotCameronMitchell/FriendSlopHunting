@@ -45,6 +45,7 @@ namespace FriendSlop.EditorTools
         static readonly Vector3 CabinPos = new Vector3(3f, 0f, 16f);
         static readonly Vector3 CampfirePos = new Vector3(2.5f, 0f, 5.5f);
         static readonly Vector3 LodgePos = new Vector3(-14f, 0f, 14f);
+        static readonly Vector3 GaragePos = new Vector3(-12f, 0f, -15f);
         static readonly List<Light> _nightLights = new List<Light>();
 
         static readonly Dictionary<string, Material> Mats = new Dictionary<string, Material>();
@@ -81,13 +82,14 @@ namespace FriendSlop.EditorTools
             var player = BuildPlayerPrefab(catalog, pickup, hunterRig);
             var box = BuildBoxPrefab();
             var animals = AnimalBuilder.BuildAll(name => Mats[name]);
-            var gameState = BuildGameStatePrefab(catalog, animals);
             var spawner = BuildSpawnerPrefab();
             GameObject bossPrefab = null;
             foreach (var a in animals) if (a.Species.isBoss) bossPrefab = a.Prefab;
             var totem = BuildTotemPrefab(bossPrefab);
+            var tank = BuildTankPrefab();
+            var gameState = BuildGameStatePrefab(catalog, animals, tank);
 
-            var networked = new List<GameObject> { player, box, gameState, spawner, pickup, totem };
+            var networked = new List<GameObject> { player, box, gameState, spawner, pickup, totem, tank };
             foreach (var a in animals) networked.Add(a.Prefab);
             var prefabList = RegisterNetworkPrefabs(networked.ToArray());
 
@@ -120,6 +122,8 @@ namespace FriendSlop.EditorTools
             Mat("Gunsmith", lit, new Color(0.7f, 0.3f, 0.2f));
             Mat("Animal", lit, Color.white); // tinted per species at runtime
             Mat("Stone", lit, new Color(0.42f, 0.42f, 0.46f));
+            Mat("TankOlive", lit, new Color(0.36f, 0.42f, 0.22f));
+            Mat("TankOliveDark", lit, new Color(0.24f, 0.28f, 0.15f));
             Mat("Glow", unlit, new Color(1f, 0.45f, 0.15f));
             var worldText = Shader.Find("FriendSlop/WorldText");
             if (worldText != null) Mat("WorldText", worldText, Color.white);
@@ -299,13 +303,16 @@ namespace FriendSlop.EditorTools
 
         // =========================================================== Scene
 
-        static GameObject BuildGameStatePrefab(WeaponCatalog catalog, List<AnimalBuilder.Built> animals)
+        static GameObject BuildGameStatePrefab(WeaponCatalog catalog, List<AnimalBuilder.Built> animals, GameObject tank)
         {
             var go = new GameObject("GameState");
             go.AddComponent<NetworkObject>();
             var state = go.AddComponent<GameState>();
             var so = new SerializedObject(state);
             so.FindProperty("catalog").objectReferenceValue = catalog;
+            so.FindProperty("tankPrefab").objectReferenceValue = tank;
+            so.FindProperty("garagePosition").vector3Value = GaragePos;
+            so.FindProperty("garageYaw").floatValue = Quaternion.LookRotation(-new Vector3(GaragePos.x, 0f, GaragePos.z).normalized).eulerAngles.y;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             // Shared clock + night happenings (ghost goose nights, the Shadow Stag).
@@ -393,7 +400,7 @@ namespace FriendSlop.EditorTools
             for (int i = 0, placed = 0; i < 4000 && placed < 520; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
-                if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || !Wild(p, 3f, 30f)) continue;
+                if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || !Wild(p, 3f, 30f)) continue;
                 p.y = GroundY(p);
                 if (p.y > 22f) continue; // bare peaks
                 NatureArt.Tree(trees, p, rng);
@@ -405,7 +412,7 @@ namespace FriendSlop.EditorTools
             for (int i = 0, placed = 0; i < 1200 && placed < 130; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
-                if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || (p - SellZonePos).magnitude < 9f || !Wild(p, 1.5f, 45f)) continue;
+                if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || (p - SellZonePos).magnitude < 9f || !Wild(p, 1.5f, 45f)) continue;
                 p.y = GroundY(p) - 0.25f;
                 NatureArt.Rock(rocks, p, rng);
                 placed++;
@@ -414,9 +421,9 @@ namespace FriendSlop.EditorTools
             var decor = new GameObject("Decor").transform;
             decor.SetParent(world, false);
             NatureArt.Decor(decor, rng, MapHalfSize - 3f, 1500,
-                p => p.magnitude < CampClearRadius + 1f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || (p - SellZonePos).magnitude < 4f || !Wild(p, 0.8f, 32f),
+                p => p.magnitude < CampClearRadius + 1f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || (p - SellZonePos).magnitude < 4f || !Wild(p, 0.8f, 32f),
                 GroundY);
-            NatureArt.Grass(world, MapHalfSize - 1f, new[] { new Vector3(0f, 0f, 7f), new Vector3(GunShopPos.x, GunShopPos.z, 6f), new Vector3(SellZonePos.x, SellZonePos.z, 3.5f), new Vector3(TotemPos.x, TotemPos.z, 2.5f), new Vector3(CabinPos.x, CabinPos.z, 7f), new Vector3(CampfirePos.x, CampfirePos.z, 2.5f), new Vector3(LodgePos.x, LodgePos.z, 8f) });
+            NatureArt.Grass(world, MapHalfSize - 1f, new[] { new Vector3(0f, 0f, 7f), new Vector3(GunShopPos.x, GunShopPos.z, 6f), new Vector3(SellZonePos.x, SellZonePos.z, 3.5f), new Vector3(TotemPos.x, TotemPos.z, 2.5f), new Vector3(CabinPos.x, CabinPos.z, 7f), new Vector3(CampfirePos.x, CampfirePos.z, 2.5f), new Vector3(LodgePos.x, LodgePos.z, 8f), new Vector3(GaragePos.x, GaragePos.z, 6f) });
 
             // Invisible walls at the map edge (behind the mountains).
             var bounds = new GameObject("Bounds").transform;
@@ -438,6 +445,7 @@ namespace FriendSlop.EditorTools
             _nightLights.Add(BuildCabin(world));
             _nightLights.Add(BuildCampfire(world));
             BuildLuckyLodge(world);
+            BuildGarage(world);
 
             // Day/night lighting rides on the scene's sun.
             Light sunLight = null;
@@ -521,7 +529,7 @@ namespace FriendSlop.EditorTools
                 if (i % 5 >= 3) continue; // three panels, then a gap
                 float a = i * Mathf.PI * 2f / segs;
                 var p = new Vector3(Mathf.Cos(a) * fenceR, 0f, Mathf.Sin(a) * fenceR);
-                if (NearGunShop(p) || NearCabin(p) || NearLodge(p) || Mathf.Abs(p.x) < 4f && p.z < 0f) continue; // keep the totem trail open
+                if (NearGunShop(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || Mathf.Abs(p.x) < 4f && p.z < 0f) continue; // keep the totem trail open
                 p.y = GroundY(p) - 0.03f;
                 var fence = VillageArt.Piece("Prop_WoodenFence_Single", fences, p, -a * Mathf.Rad2Deg + 90f);
                 if (fence) fence.transform.position = p;
@@ -687,6 +695,7 @@ namespace FriendSlop.EditorTools
 
         static bool NearCabin(Vector3 p) => (new Vector3(p.x, 0f, p.z) - CabinPos).magnitude < 9f;
         static bool NearLodge(Vector3 p) => (new Vector3(p.x, 0f, p.z) - LodgePos).magnitude < 10f;
+        static bool NearGarage(Vector3 p) => (new Vector3(p.x, 0f, p.z) - GaragePos).magnitude < 8f;
 
         static bool NearTotem(Vector3 p) => (new Vector3(p.x, 0f, p.z) - TotemPos).magnitude < 6f;
 
@@ -718,6 +727,105 @@ namespace FriendSlop.EditorTools
 
         static Vector3 RandomInMap(System.Random rng, float half) =>
             new Vector3(((float)rng.NextDouble() * 2f - 1f) * half, 0f, ((float)rng.NextDouble() * 2f - 1f) * half);
+
+        // =========================================================== Tank & garage
+
+        /// <summary>A chunky toy tank: hull on treads, rotating turret with a long barrel, four seats.</summary>
+        static GameObject BuildTankPrefab()
+        {
+            var root = new GameObject("Tank");
+            var rb = root.AddComponent<Rigidbody>();
+            rb.mass = 4000f;
+            rb.linearDamping = 0.2f;
+            rb.angularDamping = 2f;
+            rb.interpolation = RigidbodyInterpolation.Interpolate;
+            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            var hull = root.AddComponent<BoxCollider>();
+            hull.size = new Vector3(3.2f, 1.2f, 5.2f);
+            hull.center = new Vector3(0f, 0.85f, 0f);
+            // Frictionless hull: the controller does traction and braking. Must be a saved asset, or the
+            // prefab silently drops it and default friction pins the tank in place.
+            const string treadPath = "Assets/_Game/Data/TankTread.physicMaterial";
+            var mat = AssetDatabase.LoadAssetAtPath<PhysicsMaterial>(treadPath);
+            if (mat == null) { mat = new PhysicsMaterial("TankTread"); AssetDatabase.CreateAsset(mat, treadPath); }
+            mat.dynamicFriction = 0f; mat.staticFriction = 0f; mat.bounciness = 0f;
+            mat.frictionCombine = PhysicsMaterialCombine.Minimum; mat.bounceCombine = PhysicsMaterialCombine.Minimum;
+            EditorUtility.SetDirty(mat);
+            hull.sharedMaterial = mat;
+            root.AddComponent<NetworkObject>();
+            var nt = root.AddComponent<NetworkTransform>();
+            nt.AuthorityMode = NetworkTransform.AuthorityModes.Owner; // the driver simulates it
+            nt.SyncScaleX = nt.SyncScaleY = nt.SyncScaleZ = false;
+            nt.Interpolate = true;
+            // No NetworkRigidbody: Tank toggles kinematic itself (it was pinning the driven body).
+
+            var t = root.transform;
+            Visual(PrimitiveType.Cube, "Hull", t, new Vector3(0f, 0.95f, 0f), new Vector3(2.6f, 0.75f, 4.6f), "TankOlive");
+            Visual(PrimitiveType.Cube, "Glacis", t, new Vector3(0f, 1.05f, 2.35f), new Vector3(2.5f, 0.5f, 0.6f), "TankOlive").transform.localRotation = Quaternion.Euler(-30f, 0f, 0f);
+            Visual(PrimitiveType.Cube, "Deck", t, new Vector3(0f, 1.35f, -0.4f), new Vector3(2.3f, 0.08f, 3.2f), "TankOliveDark");
+            for (int s = -1; s <= 1; s += 2)
+            {
+                Visual(PrimitiveType.Cube, "Tread", t, new Vector3(s * 1.45f, 0.55f, 0f), new Vector3(0.65f, 0.85f, 5.2f), "Gun");
+                Visual(PrimitiveType.Cube, "Fender", t, new Vector3(s * 1.45f, 1.02f, 0f), new Vector3(0.75f, 0.08f, 5.3f), "TankOliveDark");
+                for (int w = 0; w < 5; w++)
+                    Visual(PrimitiveType.Cylinder, "Wheel", t, new Vector3(s * 1.8f, 0.45f, -1.9f + w * 0.95f), new Vector3(0.62f, 0.06f, 0.62f), "Stone")
+                        .transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+                Visual(PrimitiveType.Cube, "Crate", t, new Vector3(s * 0.85f, 1.55f, -2.05f), new Vector3(0.6f, 0.4f, 0.45f), "Plank");
+            }
+
+            var turret = new GameObject("Turret").transform;
+            turret.SetParent(t, false);
+            turret.localPosition = new Vector3(0f, 1.4f, 0.35f);
+            Visual(PrimitiveType.Cylinder, "Ring", turret, new Vector3(0f, 0.1f, 0f), new Vector3(1.9f, 0.12f, 1.9f), "TankOliveDark");
+            Visual(PrimitiveType.Sphere, "Dome", turret, new Vector3(0f, 0.35f, 0f), new Vector3(1.8f, 0.85f, 2.0f), "TankOlive");
+            Visual(PrimitiveType.Cylinder, "Hatch", turret, new Vector3(-0.35f, 0.78f, -0.25f), new Vector3(0.55f, 0.06f, 0.55f), "TankOliveDark");
+            for (int s = -1; s <= 1; s += 2)
+                Visual(PrimitiveType.Cylinder, "Star", turret, new Vector3(s * 0.88f, 0.38f, 0f), new Vector3(0.42f, 0.02f, 0.42f), "Tail")
+                    .transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            var barrel = new GameObject("Barrel").transform;
+            barrel.SetParent(turret, false);
+            barrel.localPosition = new Vector3(0f, 0.38f, 0.85f);
+            Visual(PrimitiveType.Cylinder, "Tube", barrel, new Vector3(0f, 0f, 1.35f), new Vector3(0.24f, 1.35f, 0.24f), "Gun").transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            Visual(PrimitiveType.Cylinder, "MuzzleBrake", barrel, new Vector3(0f, 0f, 2.7f), new Vector3(0.36f, 0.14f, 0.36f), "Gun").transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            var muzzle = new GameObject("Muzzle").transform;
+            muzzle.SetParent(barrel, false);
+            muzzle.localPosition = new Vector3(0f, 0f, 2.95f);
+
+            // Seats: driver hatch (front), gunner on the turret, two riders on the back deck.
+            var seats = new Transform[4];
+            Vector3[] seatPos = { new Vector3(0.65f, 1.33f, 1.55f), new Vector3(-0.35f, 2.2f, 0.1f), new Vector3(-0.6f, 1.4f, -1.5f), new Vector3(0.6f, 1.4f, -1.5f) };
+            for (int i = 0; i < 4; i++)
+            {
+                seats[i] = new GameObject($"Seat{i}").transform;
+                seats[i].SetParent(i == 1 ? turret : t, false);
+                seats[i].localPosition = i == 1 ? new Vector3(-0.35f, 0.8f, -0.25f) : seatPos[i];
+            }
+
+            var tank = root.AddComponent<Tank>();
+            var so = new SerializedObject(tank);
+            so.FindProperty("turret").objectReferenceValue = turret;
+            so.FindProperty("barrel").objectReferenceValue = barrel;
+            so.FindProperty("muzzle").objectReferenceValue = muzzle;
+            SetArray(so.FindProperty("seatPoints"), seats);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            return SavePrefab(root, $"{PrefabDir}/Tank.prefab");
+        }
+
+        /// <summary>Carport by the gun shop where the tank rolls out.</summary>
+        static void BuildGarage(Transform world)
+        {
+            var g = new GameObject("Garage").transform;
+            g.SetParent(world, false);
+            g.position = GaragePos;
+            g.rotation = Quaternion.LookRotation(-new Vector3(GaragePos.x, 0f, GaragePos.z).normalized);
+            VillageArt.Floor(g, 3, 4, "Floor_WoodDark", 0.04f);
+            VillageArt.Corners(g, 3, 4);
+            VillageArt.Roof(g, 3, 4, ridgeAlongX: false, gables: false);
+            VillageArt.Piece("Prop_Crate", g, new Vector3(-3.6f, 0f, -3f), 12f);
+            VillageArt.Piece("Prop_Crate", g, new Vector3(-3.6f, 1.06f, -3f), 40f, scale: 0.7f);
+            Text3D(g, "GARAGE", new Vector3(0f, 2.8f, 4.6f), 0.1f, new Color(1f, 0.85f, 0.35f));
+            Text3D(g, "buy the tank at the gun shop", new Vector3(0f, 2.35f, 4.6f), 0.04f, new Color(1f, 0.95f, 0.85f));
+        }
 
         // =========================================================== Lucky Lodge (gambling)
 
@@ -889,11 +997,16 @@ namespace FriendSlop.EditorTools
             const float D = 6f;
             float[] xs = { -2.7f, -0.9f, 0.9f, 2.7f };
             var blankets = new[] { new Color(0.75f, 0.2f, 0.2f), new Color(0.2f, 0.45f, 0.75f), new Color(0.3f, 0.6f, 0.3f), new Color(0.85f, 0.65f, 0.2f) };
-            for (int i = 0; i < xs.Length; i++)
+            for (int n = 0; n < xs.Length * 2; n++) // bunk beds: 8 sleeping spots for a full lobby
             {
-                var bed = new GameObject($"Bed{i}");
+                int i = n % xs.Length;
+                bool top = n >= xs.Length;
+                var bed = new GameObject($"Bed{n}");
                 bed.transform.SetParent(cabin, false);
-                bed.transform.localPosition = new Vector3(xs[i], 0.06f, -D / 2f + 1.45f);
+                bed.transform.localPosition = new Vector3(xs[i], top ? 1.3f : 0.06f, -D / 2f + 1.45f);
+                if (!top)
+                    for (int px = -1; px <= 1; px += 2) for (int pz = -1; pz <= 1; pz += 2)
+                        Visual(PrimitiveType.Cube, "BunkPost", bed.transform, new Vector3(px * 0.52f, 1.0f, pz * 0.98f), new Vector3(0.08f, 2.0f, 0.08f), "Plank");
                 var col = bed.AddComponent<BoxCollider>();
                 col.size = new Vector3(1.1f, 0.6f, 2.0f);
                 col.center = new Vector3(0f, 0.3f, 0f);

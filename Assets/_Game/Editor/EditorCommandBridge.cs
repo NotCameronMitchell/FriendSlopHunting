@@ -162,6 +162,52 @@ namespace FriendSlop.EditorTools
                 Debug.Log($"[Bridge] elite → {go.GetComponent<Animal>().DisplayName}");
                 return;
             }
+            if (cmd == "tank-buy") { FriendSlop.Game.GameState.Instance?.RequestTank(); Debug.Log("[Bridge] tank requested"); return; }
+            if (cmd == "tank-enter")
+            {
+                var t = FriendSlop.World.Tank.All.Count > 0 ? FriendSlop.World.Tank.All[0] : null;
+                if (t == null) { Debug.LogWarning("[Bridge] no tank"); return; }
+                t.RequestEnter();
+                Debug.Log("[Bridge] entering tank");
+                return;
+            }
+            if (cmd == "tank-exit") { if (FriendSlop.World.Tank.All.Count > 0) FriendSlop.World.Tank.All[0].RequestExit(); return; }
+            if (cmd.StartsWith("tank-drive "))
+            {
+                var a = cmd.Split(' ');
+                var t = FriendSlop.World.Tank.All.Count > 0 ? FriendSlop.World.Tank.All[0] : null;
+                t?.DebugDrive(float.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture), float.Parse(a[2], System.Globalization.CultureInfo.InvariantCulture), float.Parse(a[3], System.Globalization.CultureInfo.InvariantCulture));
+                Debug.Log("[Bridge] tank drive");
+                return;
+            }
+            if (cmd.StartsWith("tank-aim "))
+            {
+                var a = cmd.Split(' ');
+                FriendSlop.World.Tank.All[0].DebugAim(float.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture), float.Parse(a[2], System.Globalization.CultureInfo.InvariantCulture));
+                return;
+            }
+            if (cmd.StartsWith("tank-place "))
+            {
+                var a = cmd.Split(' ');
+                var t = FriendSlop.World.Tank.All[0];
+                var p = new Vector3(float.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture), 0f, float.Parse(a[2], System.Globalization.CultureInfo.InvariantCulture));
+                p.y = FriendSlop.World.Ground.HeightAt(p) + 0.5f;
+                var rb = t.GetComponent<Rigidbody>();
+                var rot = a.Length > 3 ? Quaternion.Euler(0f, float.Parse(a[3], System.Globalization.CultureInfo.InvariantCulture), 0f) : t.transform.rotation;
+                rb.position = p; rb.rotation = rot; t.transform.SetPositionAndRotation(p, rot); rb.linearVelocity = Vector3.zero;
+                var hits = Physics.OverlapBox(p + Vector3.up * 0.85f, new Vector3(1.6f, 0.6f, 2.6f), t.transform.rotation);
+                Debug.Log($"[Bridge] tank placed at {p}; overlapping: {string.Join(", ", System.Linq.Enumerable.Select(hits, h => h.name + "/" + h.attachedRigidbody?.name))}");
+                return;
+            }
+            if (cmd == "tank-fire") { if (FriendSlop.World.Tank.All.Count > 0) FriendSlop.World.Tank.All[0].DebugFire(); Debug.Log("[Bridge] tank fire"); return; }
+            if (cmd == "tank-status")
+            {
+                var t = FriendSlop.World.Tank.All.Count > 0 ? FriendSlop.World.Tank.All[0] : null;
+                var me = FriendSlop.Player.NetworkPlayer.Local;
+                if (t == null) { Debug.Log("[Bridge] tank → none"); return; }
+                Debug.Log($"[Bridge] tank → pos={t.transform.position:0.0} yaw={t.transform.eulerAngles.y:0} speed={t.GetComponent<Rigidbody>().linearVelocity.magnitude:0.0} kin={t.GetComponent<Rigidbody>().isKinematic} sleep={t.GetComponent<Rigidbody>().IsSleeping()} constraints={t.GetComponent<Rigidbody>().constraints} owner={t.OwnerClientId} seats=[{t.Occupant(0)},{t.Occupant(1)},{t.Occupant(2)},{t.Occupant(3)}] mySeat={me?.TankSeat} myPos={me?.transform.position:0.0}");
+                return;
+            }
             if (cmd == "selftest-haunt") { FriendSlop.Game.NightEvents.Instance?.ServerDebugHaunt(); Debug.Log("[Bridge] haunting queued"); return; }
             if (cmd == "selftest-stag") { FriendSlop.Game.NightEvents.Instance?.ServerDebugStag(); Debug.Log("[Bridge] shadow stag spawned"); return; }
             if (cmd == "selftest-sleep")

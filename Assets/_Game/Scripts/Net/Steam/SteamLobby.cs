@@ -24,7 +24,7 @@ namespace FriendSlop.Net.Steam
         const string HostKey = "fsh_host"; // SteamID of the Netcode host (lobby ownership can migrate; this doesn't)
 
         /// <summary>Bump when the network protocol changes so old builds don't see new lobbies.</summary>
-        public const string ProtocolVersion = "m0-2";
+        public const string ProtocolVersion = "m3";
 
         public struct LobbyEntry
         {

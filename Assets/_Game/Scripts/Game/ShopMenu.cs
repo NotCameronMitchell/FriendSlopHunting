@@ -96,6 +96,22 @@ namespace FriendSlop.Game
             if (_upgradesTab) DrawUpgrades(state);
             else
             {
+            // Vehicles
+            GUILayout.BeginHorizontal(GUI.skin.box);
+            GUILayout.BeginVertical();
+            GUILayout.Label("Tank (drivable)", _name);
+            GUILayout.Label("Seats a driver, a gunner and two riders. Explosive cannon. Flattens anything it runs over. Rolls out at the garage.", _blurb);
+            GUILayout.EndVertical();
+            GUILayout.FlexibleSpace();
+            GUILayout.BeginVertical(GUILayout.Width(120));
+            bool haveTank = FriendSlop.World.Tank.All.Count > 0;
+            GUILayout.Label(haveTank ? "Owned" : $"${GameState.TankPrice:N0}", _price);
+            GUI.enabled = haveTank || state.Money.Value >= GameState.TankPrice;
+            if (GUILayout.Button(haveTank ? "Recall" : "Buy", GUILayout.Height(26))) state.RequestTank();
+            GUI.enabled = true;
+            GUILayout.EndVertical();
+            GUILayout.EndHorizontal();
+
             var catalog = weapons.Catalog;
             _scroll = GUILayout.BeginScrollView(_scroll);
             for (int i = 0; i < catalog.Count; i++)

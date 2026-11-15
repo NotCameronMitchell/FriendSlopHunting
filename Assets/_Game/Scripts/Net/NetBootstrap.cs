@@ -24,7 +24,7 @@ namespace FriendSlop.Net
     [RequireComponent(typeof(NetworkManager))]
     public class NetBootstrap : MonoBehaviour
     {
-        public const int MaxPlayers = 4;
+        public const int MaxPlayers = 8; // friendslop sweet spot is 4, but up to 8 friends can pile in
         public const ushort DefaultPort = 7777;
 
         [SerializeField] UnityTransport directTransport;

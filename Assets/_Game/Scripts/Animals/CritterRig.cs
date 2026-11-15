@@ -445,23 +445,123 @@ namespace FriendSlop.Animals
             {
                 if (posture) { posture.localRotation = _postureRest; posture.localPosition = _postureRestPos; }
                 if (body) { body.localRotation = _bodyRest; body.localScale = Vector3.one; }
-                if (head) { head.localRotation = _headRest * Quaternion.Euler(-10f, 0f, 20f); head.localPosition = _headRestPos; }
+                if (head) head.localPosition = _headRestPos;
+                StartRagdoll();
             }
+            else
+            {
+                _ragInit = false;
+                if (body) body.localScale = Vector3.one;
+            }
+        }
+
+        // ------------------------------------------------------------------ floppy ragdoll
+
+        /// <summary>
+        /// One limp limb: a damped pendulum whose tip direction lives in world space, so it lags behind
+        /// when the carcass is thrown, spun or carried, sags with gravity and wobbles on landing.
+        /// Purely local; it only reads the (already networked) carcass motion.
+        /// </summary>
+        struct Floppy
+        {
+            public Transform bone;
+            public Quaternion rest;      // limp rest rotation (local)
+            public Vector3 tipLocal;     // direction from the pivot toward the limb's mass, in bone space
+            public Vector3 dir, vel;     // simulated world tip direction and its velocity
+            public float stiffness, damping, maxAngle, gravity;
+        }
+
+        Floppy[] _floppy;
+        Vector3 _ragPrevPos, _ragVel;
+        float _squash, _squashVel;
+        bool _ragInit;
+
+        void BuildFloppies()
+        {
+            var list = new System.Collections.Generic.List<Floppy>();
+            void Add(Transform b, Quaternion rest, Vector3 fallbackTip, float k, float maxDeg, float g)
+            {
+                if (!b || !b.parent) return;
+                list.Add(new Floppy
+                {
+                    bone = b, rest = rest, tipLocal = TipOf(b, fallbackTip), stiffness = k,
+                    damping = 1.2f * Mathf.Sqrt(k), // under-damped → wobble
+                    maxAngle = maxDeg * Mathf.Deg2Rad, gravity = g,
+                });
+            }
+            // Parents before children (head before ears) so each reads its parent's fresh pose.
+            for (int i = 0; i < legs.Length; i++)
+                Add(legs[i], _legRest[i] * Quaternion.Euler(0f, 0f, ((i % 2 == 0) ? -1f : 1f) * 15f), Vector3.down, 14f, 80f, 1.6f);
+            Add(head, _headRest * Quaternion.Euler(-10f, 0f, 12f), Vector3.forward, 10f, 70f, 2f);
+            Add(tail, _tailRest, Vector3.back, 6f, 90f, 1.6f);
+            for (int i = 0; i < ears.Length; i++) Add(ears[i], _earRest[i] * Quaternion.Euler(-35f, 0f, 0f), Vector3.up, 5f, 110f, 1.8f);
+            for (int i = 0; i < wings.Length; i++)
+                Add(wings[i], _wingRest[i] * Quaternion.Euler(0f, 0f, ((i % 2 == 0) ? -1f : 1f) * 35f), Vector3.down, 8f, 85f, 1.6f);
+            _floppy = list.ToArray();
+        }
+
+        /// <summary>Where the limb's mass sits relative to its pivot (from its renderers), in bone space.</summary>
+        static Vector3 TipOf(Transform bone, Vector3 fallback)
+        {
+            var rs = bone.GetComponentsInChildren<Renderer>(true);
+            if (rs.Length == 0) return fallback;
+            var b = rs[0].bounds;
+            for (int i = 1; i < rs.Length; i++) b.Encapsulate(rs[i].bounds);
+            Vector3 local = bone.InverseTransformPoint(b.center);
+            return local.sqrMagnitude > 1e-6f ? local.normalized : fallback;
+        }
+
+        void StartRagdoll()
+        {
+            if (_floppy == null) BuildFloppies(); // limbs are at their rest pose the first time we die
+            for (int i = 0; i < _floppy.Length; i++)
+            {
+                ref var f = ref _floppy[i];
+                if (!f.bone) continue;
+                f.dir = f.bone.parent.rotation * (f.bone.localRotation * f.tipLocal);
+                f.vel = Vector3.zero;
+            }
+            _ragPrevPos = transform.position; _ragVel = Vector3.zero; _ragInit = true;
+            _squash = 0f; _squashVel = 0f;
         }
 
         void DeadPose(bool held, float t)
         {
-            // Stiff cartoon legs, splayed; they dangle and swing while being carried.
-            for (int i = 0; i < legs.Length; i++)
+            float dt = Mathf.Clamp(Time.deltaTime, 1e-4f, 1f / 30f);
+            if (!_ragInit) StartRagdoll();
+
+            // Carcass acceleration → the gravity the limbs "feel" (they lag when it's thrown, spun or carried).
+            Vector3 pos = transform.position;
+            Vector3 v = (pos - _ragPrevPos) / dt;
+            _ragPrevPos = pos;
+            if (v.sqrMagnitude > 1600f) v = _ragVel; // teleport / pickup snap: ignore
+            Vector3 accel = Vector3.ClampMagnitude((v - _ragVel) / dt, 90f);
+            _ragVel = Vector3.Lerp(_ragVel, v, 1f - Mathf.Exp(-30f * dt));
+            Vector3 felt = Physics.gravity - accel;
+
+            for (int i = 0; i < _floppy.Length; i++)
             {
-                if (!legs[i]) continue;
-                float side = (i % 2 == 0) ? -1f : 1f;
-                float dangle = held ? Mathf.Sin(t * 5f + i) * 12f : 0f;
-                legs[i].localRotation = _legRest[i] * Quaternion.Euler(dangle, 0f, side * 22f);
+                ref var f = ref _floppy[i];
+                if (!f.bone) continue;
+                Quaternion parentRot = f.bone.parent.rotation;
+                Vector3 restLocal = f.rest * f.tipLocal;
+                Vector3 restDir = parentRot * restLocal;
+                Vector3 force = (restDir - f.dir) * f.stiffness + Vector3.ProjectOnPlane(felt, f.dir) * f.gravity;
+                f.vel += force * dt;
+                f.vel *= Mathf.Exp(-f.damping * dt);
+                f.dir = (f.dir + f.vel * dt).normalized;
+                f.vel = Vector3.ProjectOnPlane(f.vel, f.dir);
+                f.dir = Vector3.RotateTowards(restDir, f.dir, f.maxAngle, 0f); // joint limit
+                f.bone.localRotation = Quaternion.FromToRotation(restLocal, Quaternion.Inverse(parentRot) * f.dir) * f.rest;
             }
-            for (int i = 0; i < ears.Length; i++) if (ears[i]) ears[i].localRotation = _earRest[i] * Quaternion.Euler(-60f, 0f, 0f);
-            for (int i = 0; i < wings.Length; i++) if (wings[i]) wings[i].localRotation = _wingRest[i] * Quaternion.Euler(0f, 0f, ((i % 2 == 0) ? -1f : 1f) * 50f);
-            if (tail) tail.localRotation = _tailRest;
+
+            // Squash on hard landings, then jiggle back.
+            float impact = Mathf.Max(0f, accel.y) * dt;
+            if (impact > 0.12f) _squashVel -= impact * 5f;
+            _squashVel += -_squash * 220f * dt;
+            _squashVel *= Mathf.Exp(-8f * dt);
+            _squash = Mathf.Clamp(_squash + _squashVel * dt, -0.28f, 0.28f);
+            if (body) body.localScale = new Vector3(1f - _squash * 0.6f, 1f + _squash, 1f - _squash * 0.6f);
         }
     }
 }

@@ -98,6 +98,14 @@ namespace FriendSlop.Weapons
 
         // ============================================================ Owner input
 
+        /// <summary>Every peer: tank driver/gunner put their gun away (no floating hands in the chase camera).</summary>
+        void LateUpdate()
+        {
+            if (!_model || _player == null) return;
+            bool show = !_player.InTankControl && !_boomerangOut;
+            if (_model.gameObject.activeSelf != show) _model.gameObject.SetActive(show);
+        }
+
         void Update()
         {
             if (!IsSpawned || !IsOwner || catalog == null) return;
@@ -114,7 +122,7 @@ namespace FriendSlop.Weapons
             if (controlling) HandleSwitching(kb, mouse);
             if (controlling && Controls.Pressed(GameAction.DropWeapon)) RequestDropEquipped();
 
-            bool canShoot = controlling && !_player.IsCarrying;
+            bool canShoot = controlling && !_player.IsCarrying && !_player.InTankControl; // driver/gunner use the cannon
             bool aiming = canShoot && Controls.Held(GameAction.Aim);
 
             if (playerCamera)

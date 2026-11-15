@@ -110,7 +110,18 @@ namespace FriendSlop.Animals
             _rig = GetComponentInChildren<CritterRig>(true);
             Tint(furRenderers, species != null ? species.furColor : Color.white);
             Tint(accentRenderers, species != null ? species.accentColor : Color.white);
+            // Carcasses bounce and tumble a little instead of thudding (only matters once dead/non-kinematic).
+            foreach (var c in GetComponentsInChildren<Collider>(true))
+                if (!c.isTrigger) c.sharedMaterial = CarcassMaterial;
+            _rb.angularDamping = 0.6f;
         }
+
+        static PhysicsMaterial _carcassMat;
+        static PhysicsMaterial CarcassMaterial => _carcassMat ??= new PhysicsMaterial("Carcass")
+        {
+            bounciness = 0.3f, dynamicFriction = 0.45f, staticFriction = 0.6f,
+            bounceCombine = PhysicsMaterialCombine.Maximum, frictionCombine = PhysicsMaterialCombine.Average,
+        };
 
         public override void OnNetworkSpawn()
         {
