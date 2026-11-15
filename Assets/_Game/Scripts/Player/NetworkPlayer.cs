@@ -293,6 +293,8 @@ namespace FriendSlop.Player
             }
 
             float speed = controlling && Controls.Held(GameAction.Sprint) ? sprintSpeed : walkSpeed;
+            float wade = FriendSlop.World.WaterVolume.DepthAt(transform.position);
+            if (wade > 0.2f) speed *= Mathf.Lerp(0.75f, 0.5f, Mathf.InverseLerp(0.2f, 1.2f, wade)); // sloshing through water
             if (IsCarrying) speed *= CarrySpeedFactor();
             Vector3 horizontal = (transform.right * input.x + transform.forward * input.y) * speed + _knockback;
             _knockback = Vector3.MoveTowards(_knockback, Vector3.zero, 22f * Time.deltaTime);

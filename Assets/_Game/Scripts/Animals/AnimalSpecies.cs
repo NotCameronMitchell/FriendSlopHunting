@@ -83,6 +83,7 @@ namespace FriendSlop.Animals
         public int packSize = 1;
         public float minSpawnDistance = 22f;
         public float maxSpawnDistance = 70f;
+        [HideInInspector] public int dataVersion; // builder migrations (e.g. v2 = big terrain map rings)
 
         [Header("Boss")]
         public bool isBoss;

@@ -154,7 +154,14 @@ Cameron's MVP priorities, in the agreed build order (**gameplay → mobs → men
 | **M2b** | **Mobs & bosses** | Many more animals (aggressive ones that fight back), plus summonable bosses. Absorbs the old M2 animals and the M3 legendary. | ✅ first pass (8 species + Big Doug) |
 | **M2c** | **Menus** | Main/home menu. **Options:** view and rebind keybinds, volume sliders, push-to-talk toggle, mute/unmute button. **Character customization** with outfits, buyable with in-game money or unlocked by achievements. | ✅ done (options, rebinds, home screen, 29 cosmetics, 9 achievements) |
 | **M2d** | **Art upgrade** | CC0 packs (Quaternius/Kenney): better trees, grass, rocks, and a modular animated character for outfits. Each download needs Cameron's OK. | ✅ first pass (Quaternius nature, KayKit hunters, PEAK-style animals) |
-| **M3+** | Old M3–M5 | Day/night + spooky nights, proximity voice, save/load, finale. Plus `docs/ideas.md`. | later |
+| **M3a** | **Terrain & big map** | 300 m mountaintop valley ringed by peaks (the border), hills, lake + pond, two streams, painted ground, procedural sky; difficulty rings spread over the bigger map. | ✅ first pass |
+| **M3b** | **Friendly fire toggle** | Host chooses per lobby whether players can shoot each other. | next |
+| **M3c** | **Day / night** | Day–night cycle, spooky nights (scarier mobs), a cabin with beds to sleep through the night. | |
+| **M3d** | **Progression** | Hunter levels, weapon/character upgrades, harder mobs further out (difficulty rings). | |
+| **M3e** | **Gambling shack** | Roulette, slots and scratchers, paid with animals. | |
+| **M3f** | **Proximity voice** | Voice chat that fades with distance (uses the existing push-to-talk/mute settings). | |
+| **M3g** | **Drivable tank** | The goofy vehicle from the weapon list. | |
+| **Later** | Old M4–M5 | Save/load between sessions, a finale. Plus `docs/ideas.md`. | later |
 
 **Weapon roster (M2a).** Ammo is unlimited for everything. Prices are first guesses to tune in playtests.
 | Weapon | Type | Feel |

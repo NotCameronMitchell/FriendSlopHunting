@@ -63,10 +63,12 @@ namespace FriendSlop.Animals
                 Vector2 dir = Random.insideUnitCircle.normalized;
                 float dist = Random.Range(_species.minSpawnDistance, _species.maxSpawnDistance);
                 Vector3 center = transform.position + new Vector3(dir.x, 0f, dir.y) * dist;
+                center.y = FriendSlop.World.Ground.HeightAt(center); // hills: sample at ground level
+                if (FriendSlop.World.WaterVolume.DepthAt(center + Vector3.up * 0.1f) > 0f) continue;
                 // Fighters keep well clear of camp (safe zone + a buffer), so the area around
                 // camp stays friendly and danger grows with distance.
                 if (_species.Fights && SafeZone.Contains(center, FighterCampBuffer)) continue;
-                if (!NavMesh.SamplePosition(center, out var hit, 4f, NavMesh.AllAreas)) continue;
+                if (!NavMesh.SamplePosition(center, out var hit, 6f, NavMesh.AllAreas)) continue;
 
                 int count = Mathf.Min(Mathf.Max(1, _species.packSize), _species.population - AliveCount());
                 for (int i = 0; i < count; i++)

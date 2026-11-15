@@ -55,6 +55,23 @@ namespace FriendSlop.EditorTools
 
         static void Run(string cmd)
         {
+            if (cmd.StartsWith("tp "))
+            {
+                // tp x z yaw : stand on the ground at (x, z) facing yaw degrees.
+                var a = cmd.Substring(3).Split(' ');
+                var hp = FriendSlop.Player.PlayerHealth.Local;
+                if (hp == null || a.Length < 3) { Debug.LogWarning("[Bridge] tp: in a hunt, tp x z yaw"); return; }
+                float x = float.Parse(a[0], System.Globalization.CultureInfo.InvariantCulture);
+                float z = float.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture);
+                float yaw = float.Parse(a[2], System.Globalization.CultureInfo.InvariantCulture);
+                var p = new Vector3(x, 0f, z);
+                p.y = FriendSlop.World.Ground.HeightAt(p) + 0.3f;
+                var np = hp.GetComponent<FriendSlop.Player.NetworkPlayer>();
+                np.Teleport(p);
+                np.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+                Debug.Log($"[Bridge] tp → {p} yaw {yaw} water depth {FriendSlop.World.WaterVolume.DepthAt(p):0.00}");
+                return;
+            }
             if (cmd.StartsWith("equip ") && int.TryParse(cmd.Substring(6), out int equipIndex))
             {
                 var pw = FriendSlop.Weapons.PlayerWeapons.Local;

@@ -29,6 +29,10 @@ namespace FriendSlop.World
         public int seed = 4242;
         [Tooltip("XZ circles (x, z, radius) kept clear of grass, e.g. camp floor and shop interior.")]
         public Vector3[] clearings;
+        [Tooltip("Sit on the terrain, skipping water, cliffs and bare peaks.")]
+        public bool useTerrain;
+        public float maxSteepness = 30f;
+        public float maxHeight = 20f;
 
         const float CellSize = 16f;
 
@@ -67,6 +71,12 @@ namespace FriendSlop.World
                 float s01 = (float)rng.NextDouble();
                 float edge = (float)rng.NextDouble();
                 if (InClearing(pos, edge)) continue;
+                if (useTerrain)
+                {
+                    pos.y = Ground.HeightAt(pos);
+                    if (pos.y < Ground.WaterY + 0.25f || pos.y > maxHeight) continue;
+                    if (Ground.SteepnessAt(pos) > maxSteepness || WaterVolume.DepthAt(pos + Vector3.up * 0.1f) > 0f) continue;
+                }
 
                 int proto = 0;
                 for (float acc = 0f; proto < prototypes.Length; proto++)
@@ -83,7 +93,7 @@ namespace FriendSlop.World
                 {
                     cell = new Cell
                     {
-                        bounds = new Bounds(new Vector3((key.x + 0.5f) * CellSize, 1f, (key.y + 0.5f) * CellSize), new Vector3(CellSize + 4f, 4f, CellSize + 4f)),
+                        bounds = new Bounds(new Vector3((key.x + 0.5f) * CellSize, pos.y + 1f, (key.y + 0.5f) * CellSize), new Vector3(CellSize + 4f, 30f, CellSize + 4f)),
                         perProto = new List<Matrix4x4>[prototypes.Length],
                     };
                     lookup[key] = cell;

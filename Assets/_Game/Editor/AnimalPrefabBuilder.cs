@@ -147,9 +147,31 @@ namespace FriendSlop.EditorTools
                     setup(species);
                     AssetDatabase.CreateAsset(species, path);
                 }
+                Migrate(species, file);
                 result.Add(new Built { Species = species, Prefab = BuildPrefab(species, file, mat) });
             }
             return result;
+        }
+
+        /// <summary>v2: the 300 m terrain map. Spread populations into difficulty rings (calm near camp, dangerous at the edge).</summary>
+        static void Migrate(AnimalSpecies s, string file)
+        {
+            if (s.dataVersion >= 2) return;
+            (int pop, float min, float max) ring = file switch
+            {
+                "Rabbit" => (12, 16f, 85f),
+                "Duck" => (9, 20f, 110f),
+                "Goose" => (6, 25f, 95f),
+                "Deer" => (8, 35f, 125f),
+                "Boar" => (6, 55f, 125f),
+                "Wolf" => (8, 85f, 140f),
+                "Moose" => (3, 70f, 140f),
+                "Bear" => (2, 100f, 142f),
+                _ => (s.population, s.minSpawnDistance, s.maxSpawnDistance),
+            };
+            s.population = ring.pop; s.minSpawnDistance = ring.min; s.maxSpawnDistance = ring.max;
+            s.dataVersion = 2;
+            EditorUtility.SetDirty(s);
         }
 
         static GameObject BuildPrefab(AnimalSpecies s, string file, Func<string, Material> mat)

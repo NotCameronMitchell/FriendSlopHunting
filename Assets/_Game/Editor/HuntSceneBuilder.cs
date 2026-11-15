@@ -37,7 +37,7 @@ namespace FriendSlop.EditorTools
         const string NavMeshPath = SceneDir + "/HuntTest_NavMesh.asset";
         const string OldM0ScenePath = SceneDir + "/M0_NetTest.unity";
 
-        const float MapHalfSize = 80f;
+        const float MapHalfSize = 150f; // = TerrainBuilder.Half
         const float CampClearRadius = 14f;
         static readonly Vector3 SellZonePos = new Vector3(8f, 0f, 0f);
         static readonly Vector3 GunShopPos = new Vector3(-11f, 0f, -1f);
@@ -356,46 +356,52 @@ namespace FriendSlop.EditorTools
 
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogDensity = 0.012f;
+            RenderSettings.fogDensity = 0.0055f;
             RenderSettings.fogColor = new Color(0.72f, 0.8f, 0.86f);
 
             // ---------- Static scenery (baked into the navmesh) ----------
             var world = new GameObject("World").transform;
 
-            var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            ground.name = "Ground";
-            ground.transform.SetParent(world, false);
-            ground.transform.localScale = new Vector3(MapHalfSize * 2f / 10f, 1f, MapHalfSize * 2f / 10f);
-            ground.GetComponent<Renderer>().sharedMaterial = Mats["Grass"];
-            ground.isStatic = true;
+            // Hills, mountain border, lake, pond and streams (camp stays flat at y = 0).
+            var terrain = TerrainBuilder.Build(world);
+            float GroundY(Vector3 p) => terrain.SampleHeight(p) + terrain.transform.position.y;
+            float Steep(Vector3 p) => terrain.terrainData.GetSteepness(
+                Mathf.Clamp01((p.x + MapHalfSize) / (MapHalfSize * 2f)), Mathf.Clamp01((p.z + MapHalfSize) / (MapHalfSize * 2f)));
+            bool Wild(Vector3 p, float waterMargin, float maxSteep) =>
+                !TerrainBuilder.NearWater(p, waterMargin) && Steep(p) <= maxSteep;
 
             var rng = new System.Random(1337); // same forest every rebuild
             var trees = new GameObject("Trees").transform;
             trees.SetParent(world, false);
-            for (int i = 0, placed = 0; i < 900 && placed < 170; i++)
+            for (int i = 0, placed = 0; i < 4000 && placed < 520; i++)
             {
-                Vector3 p = RandomInMap(rng, MapHalfSize - 6f);
-                if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p)) continue;
+                Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
+                if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p) || !Wild(p, 3f, 30f)) continue;
+                p.y = GroundY(p);
+                if (p.y > 22f) continue; // bare peaks
                 NatureArt.Tree(trees, p, rng);
                 placed++;
             }
 
             var rocks = new GameObject("Rocks").transform;
             rocks.SetParent(world, false);
-            for (int i = 0, placed = 0; i < 300 && placed < 40; i++)
+            for (int i = 0, placed = 0; i < 1200 && placed < 130; i++)
             {
-                Vector3 p = RandomInMap(rng, MapHalfSize - 6f);
-                if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p)) continue;
+                Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
+                if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p) || (p - SellZonePos).magnitude < 9f || !Wild(p, 1.5f, 45f)) continue;
+                p.y = GroundY(p) - 0.25f;
                 NatureArt.Rock(rocks, p, rng);
                 placed++;
             }
 
             var decor = new GameObject("Decor").transform;
             decor.SetParent(world, false);
-            NatureArt.Decor(decor, rng, MapHalfSize - 3f, p => p.magnitude < CampClearRadius + 1f || NearGunShop(p) || NearTotem(p) || (p - SellZonePos).magnitude < 4f);
+            NatureArt.Decor(decor, rng, MapHalfSize - 3f, 1500,
+                p => p.magnitude < CampClearRadius + 1f || NearGunShop(p) || NearTotem(p) || (p - SellZonePos).magnitude < 4f || !Wild(p, 0.8f, 32f),
+                GroundY);
             NatureArt.Grass(world, MapHalfSize - 1f, new[] { new Vector3(0f, 0f, 7f), new Vector3(GunShopPos.x, GunShopPos.z, 6f), new Vector3(SellZonePos.x, SellZonePos.z, 3.5f), new Vector3(TotemPos.x, TotemPos.z, 2.5f) });
 
-            // Invisible walls at the map edge.
+            // Invisible walls at the map edge (behind the mountains).
             var bounds = new GameObject("Bounds").transform;
             bounds.SetParent(world, false);
             for (int i = 0; i < 4; i++)
@@ -405,8 +411,8 @@ namespace FriendSlop.EditorTools
                 var col = wall.AddComponent<BoxCollider>();
                 bool alongX = i < 2;
                 float side = i % 2 == 0 ? 1f : -1f;
-                wall.transform.position = alongX ? new Vector3(0f, 5f, side * MapHalfSize) : new Vector3(side * MapHalfSize, 5f, 0f);
-                col.size = alongX ? new Vector3(MapHalfSize * 2f, 10f, 1f) : new Vector3(1f, 10f, MapHalfSize * 2f);
+                wall.transform.position = alongX ? new Vector3(0f, 40f, side * MapHalfSize) : new Vector3(side * MapHalfSize, 40f, 0f);
+                col.size = alongX ? new Vector3(MapHalfSize * 2f, 100f, 1f) : new Vector3(1f, 100f, MapHalfSize * 2f);
                 wall.isStatic = true;
             }
 

@@ -147,7 +147,10 @@ namespace FriendSlop.EditorTools
             go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yaw, 0f));
             go.transform.localScale = Vector3.one * scale;
             PrefabUtility.InstantiatePrefab(src, go.transform);
-            foreach (var t in go.GetComponentsInChildren<Transform>(true)) t.gameObject.isStatic = true;
+            // Static for lighting/occlusion, but NOT batching-static: combined meshes ballooned the build
+            // by ~170 MB, and these materials are GPU-instanced anyway.
+            var flags = StaticEditorFlags.ContributeGI | StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic | StaticEditorFlags.ReflectionProbeStatic;
+            foreach (var t in go.GetComponentsInChildren<Transform>(true)) GameObjectUtility.SetStaticEditorFlags(t.gameObject, flags);
             return go;
         }
 
@@ -157,12 +160,12 @@ namespace FriendSlop.EditorTools
             float d = new Vector2(pos.x, pos.z).magnitude;
             float r = (float)rng.NextDouble();
             string model; float scale; float trunkRadius;
-            if (d < 40f)
+            if (d < 60f)
             {
                 if (r < 0.75f) { model = $"CommonTree_{1 + rng.Next(5)}"; scale = 1.05f + (float)rng.NextDouble() * 0.35f; trunkRadius = 0.32f; }
                 else { model = $"Pine_{1 + rng.Next(5)}"; scale = 1f + (float)rng.NextDouble() * 0.3f; trunkRadius = 0.3f; }
             }
-            else if (d < 62f)
+            else if (d < 110f)
             {
                 if (r < 0.55f) { model = $"Pine_{1 + rng.Next(5)}"; scale = 1.1f + (float)rng.NextDouble() * 0.4f; trunkRadius = 0.32f; }
                 else if (r < 0.85f) { model = $"CommonTree_{1 + rng.Next(5)}"; scale = 1.1f + (float)rng.NextDouble() * 0.3f; trunkRadius = 0.34f; }
@@ -194,7 +197,7 @@ namespace FriendSlop.EditorTools
         }
 
         /// <summary>Bushes, ferns, flowers, mushrooms and pebbles. No colliders.</summary>
-        public static void Decor(Transform parent, System.Random rng, float half, System.Func<Vector3, bool> blocked)
+        public static void Decor(Transform parent, System.Random rng, float half, int count, System.Func<Vector3, bool> blocked, System.Func<Vector3, float> groundY)
         {
             (string name, float weight, float min, float max)[] table =
             {
@@ -207,10 +210,11 @@ namespace FriendSlop.EditorTools
                 ("Pebble_Square_5", 1f, 1f, 2f), ("RockPath_Round_Wide", 0.6f, 0.6f, 1f),
             };
             float total = table.Sum(t => t.weight);
-            for (int i = 0, placed = 0; i < 1400 && placed < 520; i++)
+            for (int i = 0, placed = 0; i < count * 4 && placed < count; i++)
             {
                 var p = new Vector3(((float)rng.NextDouble() * 2f - 1f) * half, 0f, ((float)rng.NextDouble() * 2f - 1f) * half);
                 if (blocked(p)) continue;
+                p.y = groundY(p);
                 float pick = (float)rng.NextDouble() * total;
                 var row = table[^1];
                 foreach (var t in table) { pick -= t.weight; if (pick <= 0f) { row = t; break; } }
@@ -237,7 +241,8 @@ namespace FriendSlop.EditorTools
                 Proto("Flower_4_Group", 0.35f, 0.2f, 0.3f),
                 Proto("Petal_2", 0.5f, 0.6f, 0.9f),
             };
-            field.count = 22000;
+            field.count = 75000;
+            field.useTerrain = true;
         }
 
         static GrassField.Prototype Proto(string model, float weight, float min, float max)
