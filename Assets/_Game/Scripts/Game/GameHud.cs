@@ -178,6 +178,26 @@ namespace FriendSlop.Game
                 GUI.color = Color.white;
                 GUI.Label(new Rect(bar.x + 8, bar.y, bar.width, bar.height), $"HP {Mathf.CeilToInt(hp.Health.Value)}", _small);
 
+                // Mic status (voice chat itself arrives later; the controls already work).
+                string mic = null;
+                if (FriendSlop.Settings.GameSettings.MicMuted)
+                {
+                    mic = $"MIC MUTED ({FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.ToggleMute)})";
+                    GUI.color = new Color(1f, 0.45f, 0.4f);
+                }
+                else if (FriendSlop.Settings.GameSettings.PushToTalk && FriendSlop.Settings.Controls.Held(FriendSlop.Settings.GameAction.PushToTalk))
+                {
+                    mic = "TALKING";
+                    GUI.color = new Color(0.5f, 1f, 0.5f);
+                }
+                else if (!FriendSlop.Settings.GameSettings.PushToTalk)
+                {
+                    mic = "OPEN MIC";
+                    GUI.color = new Color(0.85f, 0.85f, 0.85f, 0.7f);
+                }
+                if (mic != null) Shadowed(new Rect(bar.x, bar.y - 26, 300, 22), mic, _small);
+                GUI.color = Color.white;
+
                 if (hp.IsDown.Value)
                 {
                     GUI.color = new Color(0.25f, 0f, 0f, 0.45f);

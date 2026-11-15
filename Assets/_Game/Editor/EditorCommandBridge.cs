@@ -64,6 +64,47 @@ namespace FriendSlop.EditorTools
 
             switch (cmd)
             {
+                case "selftest-pause":
+                    FriendSlop.Game.GameMenus.Show(FriendSlop.Game.GameMenus.Menu.Pause);
+                    Debug.Log($"[Bridge] pause open={FriendSlop.Game.GameMenus.Open}");
+                    break;
+                case "selftest-options":
+                    FriendSlop.Game.GameMenus.Show(FriendSlop.Game.GameMenus.Menu.Options);
+                    Debug.Log($"[Bridge] options open={FriendSlop.Game.GameMenus.Open}");
+                    break;
+                case "selftest-closemenus":
+                    FriendSlop.Game.GameMenus.Close();
+                    FriendSlop.Game.OptionsMenu.OpenFromMainMenu = false;
+                    Debug.Log("[Bridge] menus closed");
+                    break;
+                case "selftest-rebind":
+                {
+                    var C = typeof(FriendSlop.Settings.Controls);
+                    string before = $"jump={FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.Jump)} fwd={FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.MoveForward)}";
+                    FriendSlop.Settings.Controls.Rebind(FriendSlop.Settings.GameAction.Jump, FriendSlop.Settings.Controls.Binding.K(UnityEngine.InputSystem.Key.J));
+                    string mid = $"jump={FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.Jump)}";
+                    // Collision: bind Jump to W → Move forward should take Jump's old key (J).
+                    FriendSlop.Settings.Controls.Rebind(FriendSlop.Settings.GameAction.Jump, FriendSlop.Settings.Controls.Binding.K(UnityEngine.InputSystem.Key.W));
+                    string after = $"jump={FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.Jump)} fwd={FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.MoveForward)}";
+                    string saved = PlayerPrefs.GetString("fsh.bind.Jump", "(none)");
+                    FriendSlop.Settings.Controls.ResetToDefaults();
+                    string reset = $"jump={FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.Jump)} fwd={FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.MoveForward)}";
+                    Debug.Log($"[Bridge] rebind → before[{before}] set-J[{mid}] set-W[{after}] saved='{saved}' reset[{reset}]");
+                    break;
+                }
+                case "selftest-settings":
+                {
+                    float sens = FriendSlop.Settings.GameSettings.MouseSensitivity, fov = FriendSlop.Settings.GameSettings.FieldOfView, vol = FriendSlop.Settings.GameSettings.MasterVolume;
+                    FriendSlop.Settings.GameSettings.MouseSensitivity = 0.3f;
+                    FriendSlop.Settings.GameSettings.FieldOfView = 90f;
+                    FriendSlop.Settings.GameSettings.MasterVolume = 0.5f;
+                    string set = $"sens={FriendSlop.Settings.GameSettings.MouseSensitivity:0.00} fov={FriendSlop.Settings.GameSettings.FieldOfView:0} master={FriendSlop.Settings.GameSettings.MasterVolume:0.00} listener={AudioListener.volume:0.00} prefs-sens={PlayerPrefs.GetFloat("fsh.settings.sens", -1):0.00}";
+                    FriendSlop.Settings.GameSettings.MouseSensitivity = sens;
+                    FriendSlop.Settings.GameSettings.FieldOfView = fov;
+                    FriendSlop.Settings.GameSettings.MasterVolume = vol;
+                    Debug.Log($"[Bridge] settings → set[{set}] restored sens={sens:0.00} fov={fov:0} master={vol:0.00}");
+                    break;
+                }
                 case "selftest-animals":
                 {
                     var counts = new System.Collections.Generic.SortedDictionary<string, (int alive, int dead, int angry)>();

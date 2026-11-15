@@ -504,6 +504,7 @@ namespace FriendSlop.EditorTools
             hud.AddComponent<GameHud>();
             hud.AddComponent<ShopMenu>();
             hud.AddComponent<InventoryMenu>();
+            hud.AddComponent<OptionsMenu>();
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };

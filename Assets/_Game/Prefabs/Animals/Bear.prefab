@@ -67,7 +67,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FriendSlop.Animals.Hitbox
   isHead: 1
---- !u!1 &1971799781255485066
+--- !u!1 &461456688083964711
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -75,9 +75,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 5470422567516888995}
-  - component: {fileID: 494264326796076510}
-  - component: {fileID: 5397184906726902571}
+  - component: {fileID: 4488913111429059213}
+  - component: {fileID: 3993482901155446379}
+  - component: {fileID: 3155321287095737072}
   m_Layer: 0
   m_Name: Ear
   m_TagString: Untagged
@@ -85,13 +85,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &5470422567516888995
+--- !u!4 &4488913111429059213
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1971799781255485066}
+  m_GameObject: {fileID: 461456688083964711}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0.165, y: 1.9999999, z: 0.9824999}
@@ -100,21 +100,21 @@ Transform:
   m_Children: []
   m_Father: {fileID: 6292575778338588099}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &494264326796076510
+--- !u!33 &3993482901155446379
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1971799781255485066}
+  m_GameObject: {fileID: 461456688083964711}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!23 &5397184906726902571
+--- !u!23 &3155321287095737072
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1971799781255485066}
+  m_GameObject: {fileID: 461456688083964711}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -804,7 +804,7 @@ Transform:
   - {fileID: 5659838894615356330}
   - {fileID: 2688880914412526521}
   - {fileID: 3751680617181586337}
-  - {fileID: 5470422567516888995}
+  - {fileID: 4488913111429059213}
   m_Father: {fileID: 6696041531904034720}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &6166382006772871302
@@ -1178,7 +1178,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 356196742
+  GlobalObjectIdHash: 1894141050
   InScenePlacedSourceGlobalObjectIdHash: 0
   m_InScenePlacedDisabledByDefault: 0
   DeferredDespawnTick: 0
@@ -1277,5 +1277,5 @@ MonoBehaviour:
   - {fileID: 2115444270899020009}
   - {fileID: 8488630067615141377}
   - {fileID: 2773255597809656960}
-  - {fileID: 5397184906726902571}
+  - {fileID: 3155321287095737072}
   accentRenderers: []

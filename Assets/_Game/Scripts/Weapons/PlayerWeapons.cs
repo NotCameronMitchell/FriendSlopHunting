@@ -4,6 +4,7 @@ using FriendSlop.Animals;
 using FriendSlop.Audio;
 using FriendSlop.Game;
 using FriendSlop.Player;
+using FriendSlop.Settings;
 using FriendSlop.World;
 using Unity.Netcode;
 using UnityEngine;
@@ -32,7 +33,6 @@ namespace FriendSlop.Weapons
         [SerializeField] Camera playerCamera;
         [SerializeField] Transform gunHolder;
         [SerializeField] Material tracerMaterial;
-        [SerializeField] float hipFov = 75f;
         [SerializeField] GameObject pickupPrefab;
 
         const float LongShotDistance = 35f;
@@ -105,21 +105,21 @@ namespace FriendSlop.Weapons
             if (def == null) return;
 
             if (controlling) HandleSwitching(kb, mouse);
-            if (controlling && kb.gKey.wasPressedThisFrame) RequestDropEquipped();
+            if (controlling && Controls.Pressed(GameAction.DropWeapon)) RequestDropEquipped();
 
             bool canShoot = controlling && !_player.IsCarrying;
-            bool aiming = canShoot && mouse.rightButton.isPressed;
+            bool aiming = canShoot && Controls.Held(GameAction.Aim);
 
             if (playerCamera)
-                playerCamera.fieldOfView = Mathf.Lerp(playerCamera.fieldOfView, aiming ? def.aimFov : hipFov, Time.deltaTime * 12f);
+                playerCamera.fieldOfView = Mathf.Lerp(playerCamera.fieldOfView, aiming ? def.aimFov * GameSettings.FieldOfView / 75f : GameSettings.FieldOfView, Time.deltaTime * 12f);
             if (gunHolder)
                 gunHolder.localPosition = Vector3.Lerp(gunHolder.localPosition, _holderRest, Time.deltaTime * 12f);
 
             // Minigun-style spin-up.
-            bool trigger = canShoot && (def.IsAuto ? mouse.leftButton.isPressed : mouse.leftButton.wasPressedThisFrame);
+            bool trigger = canShoot && (def.IsAuto ? Controls.Held(GameAction.Fire) : Controls.Pressed(GameAction.Fire));
             if (def.spinUpTime > 0f)
             {
-                bool holding = canShoot && mouse.leftButton.isPressed;
+                bool holding = canShoot && Controls.Held(GameAction.Fire);
                 _spin = Mathf.MoveTowards(_spin, holding ? 1f : 0f, Time.deltaTime / def.spinUpTime);
                 if (_model) _model.Rotate(0f, 0f, 1500f * _spin * Time.deltaTime, Space.Self);
                 if (_spin < 1f) trigger = false;

@@ -2,6 +2,7 @@ using FriendSlop.Animals;
 using FriendSlop.Audio;
 using FriendSlop.Game;
 using FriendSlop.Interaction;
+using FriendSlop.Settings;
 using FriendSlop.Weapons;
 using FriendSlop.World;
 using Unity.Netcode;
@@ -35,7 +36,6 @@ namespace FriendSlop.Player
         [SerializeField] float carrySpeedMultiplier = 0.8f;
         [SerializeField] float jumpHeight = 1.2f;
         [SerializeField] float gravity = -20f;
-        [SerializeField] float lookSensitivity = 0.12f;
 
         [Header("Interaction")]
         [SerializeField] float interactRange = 3.5f;
@@ -168,47 +168,60 @@ namespace FriendSlop.Player
             UpdateFootsteps();
             if (!IsOwner) return;
 
-            var kb = Keyboard.current;
-            var mouse = Mouse.current;
-            if (kb == null || mouse == null) return;
+            if (Keyboard.current == null || Mouse.current == null) return;
 
             if (IsDown)
             {
                 LocalHint = string.Empty;
-                Move(kb, controlling: false); // gravity + knockback only
+                Move(controlling: false); // gravity + knockback only
                 return;
             }
+
+            if (Controls.Pressed(GameAction.ToggleMute)) GameSettings.MicMuted = !GameSettings.MicMuted;
 
             if (GameMenus.AnyOpen)
             {
-                bool close = kb.escapeKey.wasPressedThisFrame
-                             || (ShopMenu.IsOpen && kb.eKey.wasPressedThisFrame)
-                             || (InventoryMenu.IsOpen && kb.tabKey.wasPressedThisFrame);
-                if (close) GameMenus.Close();
+                // Options backs out to the pause menu; everything else closes.
+                if (OptionsMenu.IsCapturingKey) { /* rebinding: swallow input */ }
+                else if (Controls.Pressed(GameAction.Pause))
+                {
+                    if (GameMenus.Open == GameMenus.Menu.Options) GameMenus.Show(GameMenus.Menu.Pause);
+                    else GameMenus.Close();
+                }
+                else if ((ShopMenu.IsOpen && Controls.Pressed(GameAction.Interact))
+                         || (InventoryMenu.IsOpen && Controls.Pressed(GameAction.Inventory)))
+                    GameMenus.Close();
                 LocalHint = string.Empty;
-                Move(kb, controlling: false); // keep gravity going
+                Move(controlling: false); // keep gravity going
                 return;
             }
 
-            if (kb.tabKey.wasPressedThisFrame && !IsCarrying)
+            if (Controls.Pressed(GameAction.Inventory) && !IsCarrying)
             {
                 InventoryMenu.Toggle();
                 return;
             }
 
-            if (kb.escapeKey.wasPressedThisFrame)
-                SetCursorLocked(Cursor.lockState != CursorLockMode.Locked);
+            if (Controls.Pressed(GameAction.Pause))
+            {
+                GameMenus.Show(GameMenus.Menu.Pause);
+                return;
+            }
 
-            if (Application.isEditor && kb.f9Key.wasPressedThisFrame)
+            // Clicked back into the game window after alt-tabbing: grab the mouse again.
+            if (Cursor.lockState != CursorLockMode.Locked && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+                SetCursorLocked(true);
+
+            if (Application.isEditor && Keyboard.current != null && Keyboard.current.f9Key.wasPressedThisFrame)
                 GameState.Instance?.RequestDevMoney();
 
             bool controlling = Cursor.lockState == CursorLockMode.Locked;
 
-            if (controlling) Look(mouse.delta.ReadValue());
+            if (controlling) Look(Mouse.current.delta.ReadValue());
             _recoil = Mathf.Lerp(_recoil, 0f, Time.deltaTime * 9f);
             if (cameraPivot) cameraPivot.localRotation = Quaternion.Euler(_pitch - _recoil, 0f, 0f);
-            Move(kb, controlling);
-            UpdateCarry(kb, mouse, controlling);
+            Move(controlling);
+            UpdateCarry(controlling);
         }
 
         void UpdateFootsteps()
@@ -242,28 +255,29 @@ namespace FriendSlop.Player
 
         void Look(Vector2 delta)
         {
-            delta *= lookSensitivity;
+            delta *= GameSettings.MouseSensitivity;
+            if (GameSettings.InvertY) delta.y = -delta.y;
             transform.Rotate(0f, delta.x, 0f, Space.Self);
             _pitch = Mathf.Clamp(_pitch - delta.y, -85f, 85f);
         }
 
-        void Move(Keyboard kb, bool controlling)
+        void Move(bool controlling)
         {
             Vector2 input = Vector2.zero;
             if (controlling)
             {
-                input.x = (kb.dKey.isPressed ? 1f : 0f) - (kb.aKey.isPressed ? 1f : 0f);
-                input.y = (kb.wKey.isPressed ? 1f : 0f) - (kb.sKey.isPressed ? 1f : 0f);
+                input.x = (Controls.Held(GameAction.MoveRight) ? 1f : 0f) - (Controls.Held(GameAction.MoveLeft) ? 1f : 0f);
+                input.y = (Controls.Held(GameAction.MoveForward) ? 1f : 0f) - (Controls.Held(GameAction.MoveBack) ? 1f : 0f);
                 input = Vector2.ClampMagnitude(input, 1f);
             }
 
-            float speed = controlling && kb.leftShiftKey.isPressed ? sprintSpeed : walkSpeed;
+            float speed = controlling && Controls.Held(GameAction.Sprint) ? sprintSpeed : walkSpeed;
             if (IsCarrying) speed *= CarrySpeedFactor();
             Vector3 horizontal = (transform.right * input.x + transform.forward * input.y) * speed + _knockback;
             _knockback = Vector3.MoveTowards(_knockback, Vector3.zero, 22f * Time.deltaTime);
 
             if (_cc.isGrounded && _verticalVelocity < 0f) _verticalVelocity = -2f;
-            if (controlling && _cc.isGrounded && kb.spaceKey.wasPressedThisFrame)
+            if (controlling && _cc.isGrounded && Controls.Pressed(GameAction.Jump))
                 _verticalVelocity = Mathf.Sqrt(jumpHeight * -2f * gravity);
             _verticalVelocity += gravity * Time.deltaTime;
 
@@ -301,7 +315,7 @@ namespace FriendSlop.Player
 
         // ------------------------------ Carrying ------------------------------
 
-        void UpdateCarry(Keyboard kb, Mouse mouse, bool controlling)
+        void UpdateCarry(bool controlling)
         {
             // Resolve a pending pickup once the host confirms (or give up after a moment).
             if (_pendingPickup != null)
@@ -321,8 +335,8 @@ namespace FriendSlop.Player
             {
                 LocalHint = "E drop · Left click throw · Take it to the trader to sell";
                 if (!controlling) return;
-                if (kb.eKey.wasPressedThisFrame) Release(_cc.velocity);
-                else if (mouse.leftButton.wasPressedThisFrame) Release(_cc.velocity + LookDirection() * throwSpeed);
+                if (Controls.Pressed(GameAction.Interact)) Release(_cc.velocity);
+                else if (Controls.Pressed(GameAction.Fire)) Release(_cc.velocity + LookDirection() * throwSpeed);
                 return;
             }
 
@@ -334,19 +348,19 @@ namespace FriendSlop.Player
                 {
                     bool have = TryGetComponent(out PlayerWeapons pw) && pw.Owns(pickup.WeaponIndex.Value);
                     LocalHint = have ? $"You already have a {pickup.Definition.displayName}" : $"E pick up {pickup.Definition.displayName}";
-                    if (!have && controlling && kb.eKey.wasPressedThisFrame) pickup.RequestPickup();
+                    if (!have && controlling && Controls.Pressed(GameAction.Interact)) pickup.RequestPickup();
                 }
                 else if (LookAt<GunShop>(GunShop.InteractRange) != null)
                 {
                     LocalHint = "E browse the gun shop";
-                    if (controlling && kb.eKey.wasPressedThisFrame) ShopMenu.Open();
+                    if (controlling && Controls.Pressed(GameAction.Interact)) ShopMenu.Open();
                 }
                 else if (LookAt<BossTotem>(BossTotem.InteractRange) is BossTotem totem && totem.BossSpecies != null)
                 {
                     LocalHint = BossTotem.BossAlive
                         ? $"{totem.BossSpecies.bossTitle} is already loose…"
                         : $"E summon {totem.BossSpecies.bossTitle} (${totem.SummonCost:N0}, bounty ${totem.BossSpecies.bounty:N0})";
-                    if (!BossTotem.BossAlive && controlling && kb.eKey.wasPressedThisFrame) totem.RequestSummon();
+                    if (!BossTotem.BossAlive && controlling && Controls.Pressed(GameAction.Interact)) totem.RequestSummon();
                 }
                 else LocalHint = string.Empty;
                 return;
@@ -356,7 +370,7 @@ namespace FriendSlop.Player
                 ? $"E pick up {animal.Species.displayName} ({animal.WeightKg.Value:0.0} kg, ~${animal.SaleValue})"
                 : "E pick up";
 
-            if (controlling && kb.eKey.wasPressedThisFrame && _pendingPickup == null)
+            if (controlling && Controls.Pressed(GameAction.Interact) && _pendingPickup == null)
             {
                 _pendingPickup = target;
                 _pendingUntil = Time.time + 1.5f;

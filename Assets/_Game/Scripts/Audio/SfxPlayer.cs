@@ -39,7 +39,7 @@ namespace FriendSlop.Audio
         {
             src.Stop();
             src.clip = clip;
-            src.volume = volume;
+            src.volume = volume * FriendSlop.Settings.GameSettings.SfxVolume;
             src.pitch = pitch * Random.Range(0.96f, 1.04f); // tiny variation so repeats don't feel robotic
             src.Play();
         }

@@ -29,6 +29,7 @@ namespace FriendSlop.Net
             _title ??= new GUIStyle(GUI.skin.label) { fontSize = 20, fontStyle = FontStyle.Bold };
             _wrap ??= new GUIStyle(GUI.skin.label) { wordWrap = true };
 
+            if (FriendSlop.Game.OptionsMenu.OpenFromMainMenu) return; // options screen is on top
             if (!_net.IsRunning) DrawLobbyMenu();
             else DrawSessionHud();
         }
@@ -83,6 +84,9 @@ namespace FriendSlop.Net
             GUILayout.EndHorizontal();
             if (GUILayout.Button("Join", GUILayout.Height(28))) _net.JoinDirect(_address);
 
+            GUILayout.Space(10);
+            if (GUILayout.Button("Options", GUILayout.Height(28))) FriendSlop.Game.OptionsMenu.OpenFromMainMenu = true;
+
             GUILayout.FlexibleSpace();
             GUILayout.Label($"Status: {_net.Status}", _wrap);
             GUILayout.EndArea();
@@ -106,7 +110,7 @@ namespace FriendSlop.Net
             if (cursorFree)
             {
                 GUILayout.Space(6);
-                GUILayout.Label("WASD move · Shift sprint · Space jump\nLeft click shoot · Right click aim · 1-0/scroll switch\nE interact / pick up · Left click throw (carrying)\nTab inventory · G drop weapon · Esc toggle mouse");
+                GUILayout.Label("WASD move · Shift sprint · Space jump\nLeft click shoot · Right click aim · 1-0/scroll switch\nE interact / pick up · Left click throw (carrying)\nTab inventory · G drop weapon · Esc pause / options");
                 if (nm.IsHost && _net.Backend == NetBackend.Steam && _steam != null && _steam.Current.HasValue)
                 {
                     if (GUILayout.Button("Invite friends (Steam overlay)", GUILayout.Height(26))) _steam.OpenInviteOverlay();
