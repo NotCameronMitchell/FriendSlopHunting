@@ -100,7 +100,7 @@ namespace FriendSlop.Weapons
 
             WatchUnlocks();
 
-            bool controlling = Cursor.lockState == CursorLockMode.Locked && !GameMenus.AnyOpen;
+            bool controlling = Cursor.lockState == CursorLockMode.Locked && !GameMenus.AnyOpen && !_player.IsDown;
             var def = Current;
             if (def == null) return;
 

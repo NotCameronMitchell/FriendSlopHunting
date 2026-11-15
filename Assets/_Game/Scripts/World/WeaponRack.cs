@@ -14,6 +14,8 @@ namespace FriendSlop.World
         [SerializeField] int columns = 4;
         [SerializeField] Vector2 spacing = new Vector2(1.5f, 0.85f);
         [SerializeField] float modelScale = 2.2f;
+        [Tooltip("Depth-tested text material so tags don't show through walls.")]
+        [SerializeField] Material textMaterial;
 
         void Start()
         {
@@ -58,6 +60,7 @@ namespace FriendSlop.World
                 {
                     text.font = font;
                     tag.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+                    if (textMaterial != null) tag.AddComponent<WorldText>().SetBaseMaterial(textMaterial);
                 }
             }
         }

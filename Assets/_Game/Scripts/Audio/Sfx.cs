@@ -15,6 +15,97 @@ namespace FriendSlop.Audio
         static AudioClip _gunshot, _bolt, _hit, _headshot, _squeak, _boing, _chaChing, _thud, _whoosh;
         static AudioClip[] _footsteps;
         static AudioClip _twang, _thwip, _rocket, _explosion;
+        static AudioClip _quack, _honk, _grunt, _growl, _bellow, _roar;
+
+        /// <summary>The call for an animal voice type.</summary>
+        public static AudioClip ForVoice(FriendSlop.Animals.Voice voice) => voice switch
+        {
+            FriendSlop.Animals.Voice.Quack => _quack ??= MakeQuack(),
+            FriendSlop.Animals.Voice.Honk => _honk ??= MakeHonk(),
+            FriendSlop.Animals.Voice.Grunt => _grunt ??= MakeGrunt(),
+            FriendSlop.Animals.Voice.Growl => _growl ??= MakeGrowl(),
+            FriendSlop.Animals.Voice.Bellow => _bellow ??= MakeBellow(),
+            FriendSlop.Animals.Voice.Roar => _roar ??= MakeRoar(),
+            _ => Squeak,
+        };
+
+        // Nasal buzzy tone: sawtooth-ish harmonics through a crude formant.
+        static double Buzz(double phase, int harmonics)
+        {
+            double v = 0;
+            for (int h = 1; h <= harmonics; h++) v += Math.Sin(h * phase) / h;
+            return v;
+        }
+
+        static AudioClip MakeQuack() =>
+            Build("Quack", 0.3f, (t, i, s) =>
+            {
+                double f = 420 - 160 * (t / 0.3);
+                s.Phase += 2 * Math.PI * f / Rate;
+                double env = Math.Min(1, t / 0.01) * Math.Exp(-t * 6);
+                return Buzz(s.Phase, 9) * (0.6 + 0.4 * Math.Sin(2 * Math.PI * 30 * t)) * env * 0.5;
+            });
+
+        static AudioClip MakeHonk() =>
+            Build("Honk", 0.5f, (t, i, s) =>
+            {
+                double f = 330 + 60 * Math.Sin(Math.PI * Math.Min(1, t / 0.45));
+                s.Phase += 2 * Math.PI * f / Rate;
+                double env = Math.Min(1, t / 0.02) * (t < 0.38 ? 1 : Math.Exp(-(t - 0.38) * 25));
+                return Buzz(s.Phase, 12) * env * 0.45;
+            });
+
+        static AudioClip MakeGrunt()
+        {
+            var rng = new System.Random(9);
+            return Build("Grunt", 0.4f, (t, i, s) =>
+            {
+                double n = rng.NextDouble() * 2 - 1;
+                s.Low += (n - s.Low) * 0.06;
+                double f = 95 + 25 * Math.Sin(2 * Math.PI * 7 * t);
+                s.Phase += 2 * Math.PI * f / Rate;
+                double env = Math.Min(1, t / 0.02) * Math.Exp(-t * 5);
+                return (Buzz(s.Phase, 6) * 0.6 + s.Low * 3) * env;
+            });
+        }
+
+        static AudioClip MakeGrowl()
+        {
+            var rng = new System.Random(10);
+            return Build("Growl", 0.8f, (t, i, s) =>
+            {
+                double n = rng.NextDouble() * 2 - 1;
+                s.Low += (n - s.Low) * 0.1;
+                double rattle = 0.5 + 0.5 * Math.Sin(2 * Math.PI * 28 * t);  // throat flutter
+                double f = 120 + 30 * Math.Sin(2 * Math.PI * 1.5 * t);
+                s.Phase += 2 * Math.PI * f / Rate;
+                double env = Math.Min(1, t / 0.08) * (t < 0.6 ? 1 : Math.Exp(-(t - 0.6) * 12));
+                return (Buzz(s.Phase, 8) * 0.4 + s.Low * 2.5) * rattle * env;
+            });
+        }
+
+        static AudioClip MakeBellow() =>
+            Build("Bellow", 1.2f, (t, i, s) =>
+            {
+                double f = 85 + 35 * Math.Sin(Math.PI * Math.Min(1, t / 1.0));
+                s.Phase += 2 * Math.PI * f / Rate;
+                double env = Math.Min(1, t / 0.15) * (t < 0.9 ? 1 : Math.Exp(-(t - 0.9) * 10));
+                return Buzz(s.Phase, 14) * env * 0.4;
+            });
+
+        static AudioClip MakeRoar()
+        {
+            var rng = new System.Random(11);
+            return Build("Roar", 1.4f, (t, i, s) =>
+            {
+                double n = rng.NextDouble() * 2 - 1;
+                s.Low += (n - s.Low) * 0.15;
+                double f = 70 + 50 * Math.Sin(Math.PI * Math.Min(1, t / 1.1));
+                s.Phase += 2 * Math.PI * f / Rate;
+                double env = Math.Min(1, t / 0.1) * (t < 1.0 ? 1 : Math.Exp(-(t - 1.0) * 8));
+                return (Buzz(s.Phase, 10) * 0.45 + s.Low * 2.2) * env * (0.75 + 0.25 * Math.Sin(2 * Math.PI * 22 * t));
+            });
+        }
 
         public static AudioClip BowTwang => _twang ??= MakeTwang();
         public static AudioClip SlingThwip => _thwip ??= MakeThwip();

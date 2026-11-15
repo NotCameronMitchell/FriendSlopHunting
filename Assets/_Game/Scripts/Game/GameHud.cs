@@ -118,6 +118,7 @@ namespace FriendSlop.Game
             }
 
             DrawWeaponBar();
+            DrawSurvival();
 
             // Hit marker over the crosshair.
             if (Time.unscaledTime < _hitMarkerUntil)
@@ -143,6 +144,65 @@ namespace FriendSlop.Game
             string hint = NetworkPlayer.LocalHint;
             if (!string.IsNullOrEmpty(hint))
                 Shadowed(new Rect(Screen.width / 2f - 400, Screen.height - 120, 800, 30), hint, _hint);
+        }
+
+        GUIStyle _big, _small;
+        static Texture2D _white;
+
+        /// <summary>Health bar, hurt flash, downed overlay, boss bar.</summary>
+        void DrawSurvival()
+        {
+            _white ??= Texture2D.whiteTexture;
+            _big ??= new GUIStyle(GUI.skin.label) { fontSize = 34, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
+            _small ??= new GUIStyle(GUI.skin.label) { fontSize = 15, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleLeft };
+            var prev = GUI.color;
+
+            var hp = FriendSlop.Player.PlayerHealth.Local;
+            if (hp != null && hp.IsSpawned)
+            {
+                // Red flash when hit.
+                float flash = Mathf.Clamp01(1f - (Time.time - hp.LastHurtTime) / 0.5f);
+                if (flash > 0f)
+                {
+                    GUI.color = new Color(0.8f, 0f, 0f, 0.35f * flash);
+                    GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _white);
+                }
+
+                // Health bar (bottom left).
+                float frac = hp.Health.Value / FriendSlop.Player.PlayerHealth.MaxHealth;
+                var bar = new Rect(24, Screen.height - 52, 260, 22);
+                GUI.color = new Color(0f, 0f, 0f, 0.55f);
+                GUI.DrawTexture(bar, _white);
+                GUI.color = Color.Lerp(new Color(0.9f, 0.15f, 0.1f), new Color(0.3f, 0.85f, 0.3f), frac);
+                GUI.DrawTexture(new Rect(bar.x + 2, bar.y + 2, (bar.width - 4) * frac, bar.height - 4), _white);
+                GUI.color = Color.white;
+                GUI.Label(new Rect(bar.x + 8, bar.y, bar.width, bar.height), $"HP {Mathf.CeilToInt(hp.Health.Value)}", _small);
+
+                if (hp.IsDown.Value)
+                {
+                    GUI.color = new Color(0.25f, 0f, 0f, 0.45f);
+                    GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _white);
+                    GUI.color = Color.white;
+                    int secs = Mathf.Max(0, Mathf.CeilToInt(hp.RespawnAt - Time.time));
+                    Shadowed(new Rect(0, Screen.height / 2f - 40, Screen.width, 50), "YOU GOT WRECKED", _big);
+                    Shadowed(new Rect(0, Screen.height / 2f + 10, Screen.width, 30), $"Back at camp in {secs}…", _toast);
+                }
+            }
+
+            // Boss bar (top center) while a boss is alive.
+            foreach (var a in FriendSlop.Animals.Animal.All)
+            {
+                if (a == null || !a.IsSpawned || a.Species == null || !a.Species.isBoss || a.IsDead.Value) continue;
+                var r = new Rect(Screen.width / 2f - 300, 24, 600, 20);
+                GUI.color = new Color(0f, 0f, 0f, 0.6f);
+                GUI.DrawTexture(r, _white);
+                GUI.color = new Color(0.85f, 0.2f, 0.15f);
+                GUI.DrawTexture(new Rect(r.x + 2, r.y + 2, (r.width - 4) * a.HealthFraction.Value, r.height - 4), _white);
+                GUI.color = Color.white;
+                Shadowed(new Rect(r.x, r.y - 2, r.width, 24), $"{a.Species.bossTitle}{(a.IsAngry.Value ? " (hunting)" : "")}", _toast);
+                break;
+            }
+            GUI.color = prev;
         }
 
         void DrawWeaponBar()

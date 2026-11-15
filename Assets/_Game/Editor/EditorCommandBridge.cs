@@ -64,6 +64,123 @@ namespace FriendSlop.EditorTools
 
             switch (cmd)
             {
+                case "selftest-animals":
+                {
+                    var counts = new System.Collections.Generic.SortedDictionary<string, (int alive, int dead, int angry)>();
+                    foreach (var a in Animal.All)
+                    {
+                        if (a == null || a.Species == null) continue;
+                        counts.TryGetValue(a.Species.displayName, out var c);
+                        if (a.IsDead.Value) c.dead++; else c.alive++;
+                        if (a.IsAngry.Value) c.angry++;
+                        counts[a.Species.displayName] = c;
+                    }
+                    var sb = new System.Text.StringBuilder("[Bridge] animals →");
+                    foreach (var kv in counts) sb.Append($" {kv.Key}:{kv.Value.alive}a/{kv.Value.dead}d/{kv.Value.angry}!");
+                    Debug.Log(sb.ToString());
+                    break;
+                }
+                case "selftest-hurtme":
+                {
+                    var hp = FriendSlop.Player.PlayerHealth.Local;
+                    bool down = hp != null && hp.ServerDamage(40f, Vector3.back * 6f + Vector3.up * 3f, "test goose");
+                    Debug.Log($"[Bridge] hurtme → hp={hp?.Health.Value} down={down}");
+                    break;
+                }
+                case "selftest-killme":
+                {
+                    var hp = FriendSlop.Player.PlayerHealth.Local;
+                    bool down = hp != null && hp.ServerDamage(500f, Vector3.zero, "test bear");
+                    Debug.Log($"[Bridge] killme → hp={hp?.Health.Value} down={down}");
+                    break;
+                }
+                case "selftest-hp":
+                {
+                    var hp = FriendSlop.Player.PlayerHealth.Local;
+                    Debug.Log($"[Bridge] hp → {hp?.Health.Value} down={hp?.IsDown.Value} pos={hp?.transform.position}");
+                    break;
+                }
+                case "selftest-summon":
+                {
+                    var t = UnityEngine.Object.FindFirstObjectByType<FriendSlop.World.BossTotem>();
+                    if (t == null) { Debug.LogWarning("[Bridge] selftest-summon: no totem"); return; }
+                    t.RequestSummon();
+                    Debug.Log("[Bridge] summon requested");
+                    break;
+                }
+                case "selftest-tocamp":
+                {
+                    var hp = FriendSlop.Player.PlayerHealth.Local;
+                    hp?.GetComponent<FriendSlop.Player.NetworkPlayer>().Teleport(new Vector3(0f, 0.2f, -3f));
+                    Debug.Log("[Bridge] teleported to camp");
+                    break;
+                }
+                case "selftest-lookback":
+                {
+                    // Stand behind the gun shop's back wall, looking at it (sign text must NOT show through).
+                    var hp = FriendSlop.Player.PlayerHealth.Local;
+                    var shop = UnityEngine.Object.FindFirstObjectByType<FriendSlop.World.GunShop>();
+                    if (hp == null || shop == null) { Debug.LogWarning("[Bridge] selftest-lookback: missing"); return; }
+                    var root = shop.transform.parent; // the hut
+                    var np = hp.GetComponent<FriendSlop.Player.NetworkPlayer>();
+                    Vector3 from = root.position + Vector3.left * 11f + Vector3.up * 0.2f;
+                    np.Teleport(from);
+                    np.transform.rotation = Quaternion.LookRotation(Vector3.right);
+                    Debug.Log("[Bridge] behind the gun shop");
+                    break;
+                }
+                case "selftest-lookfront":
+                {
+                    var hp = FriendSlop.Player.PlayerHealth.Local;
+                    var shop = UnityEngine.Object.FindFirstObjectByType<FriendSlop.World.GunShop>();
+                    if (hp == null || shop == null) { Debug.LogWarning("[Bridge] selftest-lookfront: missing"); return; }
+                    var root = shop.transform.parent;
+                    var np = hp.GetComponent<FriendSlop.Player.NetworkPlayer>();
+                    np.Teleport(root.position + Vector3.right * 11f + Vector3.up * 0.2f);
+                    np.transform.rotation = Quaternion.LookRotation(Vector3.left);
+                    Debug.Log("[Bridge] in front of the gun shop");
+                    break;
+                }
+                case "selftest-lookboss":
+                {
+                    var hp = FriendSlop.Player.PlayerHealth.Local;
+                    Animal boss = null;
+                    foreach (var a in Animal.All) if (a != null && a.Species.isBoss && !a.IsDead.Value) boss = a;
+                    if (hp == null || boss == null) { Debug.LogWarning("[Bridge] selftest-lookboss: no boss"); return; }
+                    var np = hp.GetComponent<FriendSlop.Player.NetworkPlayer>();
+                    Vector3 side = Vector3.Cross(Vector3.up, boss.transform.forward).normalized;
+                    Vector3 from = boss.transform.position + side * 12f + boss.transform.forward * 4f;
+                    np.Teleport(from + Vector3.up * 0.2f);
+                    Vector3 look = boss.transform.position - from; look.y = 0f;
+                    np.transform.rotation = Quaternion.LookRotation(look);
+                    Debug.Log($"[Bridge] looking at {boss.Species.bossTitle} from 12 m (hp {boss.HealthFraction.Value:P0}, angry={boss.IsAngry.Value})");
+                    break;
+                }
+                case "selftest-bosskill":
+                {
+                    foreach (var a in Animal.All)
+                        if (a != null && a.Species.isBoss && !a.IsDead.Value) { a.ServerApplyHit(99999f, Vector3.forward, ShotStyle.Headshot, 0); break; }
+                    Debug.Log($"[Bridge] bosskill → money=${FriendSlop.Game.GameState.Instance?.Money.Value}");
+                    break;
+                }
+                case "selftest-lure":
+                {
+                    // Stand right next to the nearest live fighter and see if it attacks.
+                    var hp = FriendSlop.Player.PlayerHealth.Local;
+                    Animal fighter = null;
+                    float best = float.MaxValue;
+                    foreach (var a in Animal.All)
+                    {
+                        if (a == null || a.IsDead.Value || !a.Species.Fights || a.Species.isBoss) continue;
+                        float d = (a.transform.position - hp.transform.position).sqrMagnitude;
+                        if (d < best) { best = d; fighter = a; }
+                    }
+                    if (hp == null || fighter == null) { Debug.LogWarning("[Bridge] selftest-lure: no fighter"); return; }
+                    var np = hp.GetComponent<FriendSlop.Player.NetworkPlayer>();
+                    np.Teleport(fighter.transform.position + fighter.transform.forward * 2.5f + Vector3.up * 0.2f);
+                    Debug.Log($"[Bridge] lure → standing next to a {fighter.Species.displayName} ({fighter.Species.temperament})");
+                    break;
+                }
                 case "selftest-shootdrop":
                 {
                     // Real path: stand 4 m away, aim the camera at the gun's hitbox, fire the equipped weapon.

@@ -59,11 +59,66 @@ namespace FriendSlop.Player
         float _stepDistance;
         const float stepLength = 2.1f;
 
+        Vector3 _knockback;
+        PlayerHealth _health;
+        Vector3[] _bodyRestPos;
+        Quaternion[] _bodyRestRot;
+        Vector3 _pivotRestPos;
+
         /// <summary>True while holding something, and on the frame you let go (so a throw click doesn't also fire).</summary>
         public bool IsCarrying => _held != null || _releasedFrame == Time.frameCount;
         public bool IsGrounded => _cc != null && _cc.isGrounded;
+        public bool IsDown => _health != null && _health.IsSpawned && _health.IsDown.Value;
 
-        void Awake() => _cc = GetComponent<CharacterController>();
+        void Awake()
+        {
+            _cc = GetComponent<CharacterController>();
+            _health = GetComponent<PlayerHealth>();
+            if (cameraPivot) _pivotRestPos = cameraPivot.localPosition;
+        }
+
+        // ------------------------------ Health hooks ------------------------------
+
+        /// <summary>Owner: get shoved (animal hits). Decays quickly.</summary>
+        public void AddKnockback(Vector3 velocity)
+        {
+            _knockback += new Vector3(velocity.x, 0f, velocity.z);
+            if (velocity.y > 0f) _verticalVelocity = Mathf.Max(_verticalVelocity, velocity.y);
+        }
+
+        /// <summary>Owner: just went down. Drop whatever we're holding.</summary>
+        public void OnDowned()
+        {
+            if (_held != null) Release(Vector3.zero);
+            if (GameMenus.AnyOpen) GameMenus.Close();
+        }
+
+        /// <summary>Everyone: lie the body down (or stand it back up).</summary>
+        public void SetDownPose(bool down)
+        {
+            if (_bodyRestPos == null)
+            {
+                _bodyRestPos = new Vector3[bodyRenderers.Length];
+                _bodyRestRot = new Quaternion[bodyRenderers.Length];
+                for (int i = 0; i < bodyRenderers.Length; i++)
+                {
+                    if (!bodyRenderers[i]) continue;
+                    _bodyRestPos[i] = bodyRenderers[i].transform.localPosition;
+                    _bodyRestRot[i] = bodyRenderers[i].transform.localRotation;
+                }
+            }
+
+            var fall = Quaternion.Euler(-90f, 0f, 0f); // flat on your back
+            for (int i = 0; i < bodyRenderers.Length; i++)
+            {
+                var t = bodyRenderers[i] ? bodyRenderers[i].transform : null;
+                if (t == null) continue;
+                t.localPosition = down ? fall * _bodyRestPos[i] + Vector3.up * 0.35f : _bodyRestPos[i];
+                t.localRotation = down ? fall * _bodyRestRot[i] : _bodyRestRot[i];
+            }
+            if (IsOwner && cameraPivot)
+                cameraPivot.localPosition = down ? new Vector3(0f, 0.35f, 0f) : _pivotRestPos;
+        }
 
         public override void OnNetworkSpawn()
         {
@@ -116,6 +171,13 @@ namespace FriendSlop.Player
             var kb = Keyboard.current;
             var mouse = Mouse.current;
             if (kb == null || mouse == null) return;
+
+            if (IsDown)
+            {
+                LocalHint = string.Empty;
+                Move(kb, controlling: false); // gravity + knockback only
+                return;
+            }
 
             if (GameMenus.AnyOpen)
             {
@@ -196,8 +258,9 @@ namespace FriendSlop.Player
             }
 
             float speed = controlling && kb.leftShiftKey.isPressed ? sprintSpeed : walkSpeed;
-            if (IsCarrying) speed *= carrySpeedMultiplier;
-            Vector3 horizontal = (transform.right * input.x + transform.forward * input.y) * speed;
+            if (IsCarrying) speed *= CarrySpeedFactor();
+            Vector3 horizontal = (transform.right * input.x + transform.forward * input.y) * speed + _knockback;
+            _knockback = Vector3.MoveTowards(_knockback, Vector3.zero, 22f * Time.deltaTime);
 
             if (_cc.isGrounded && _verticalVelocity < 0f) _verticalVelocity = -2f;
             if (controlling && _cc.isGrounded && kb.spaceKey.wasPressedThisFrame)
@@ -220,7 +283,15 @@ namespace FriendSlop.Player
             box.RequestPush(dir * walkPushImpulse, hit.point);
         }
 
-        void Teleport(Vector3 position)
+        /// <summary>Heavier carcasses slow you down more: a rabbit barely matters, a moose is a slog.</summary>
+        float CarrySpeedFactor()
+        {
+            if (_held != null && _held.TryGetComponent(out Animal a))
+                return Mathf.Clamp(carrySpeedMultiplier - a.WeightKg.Value / 900f, 0.3f, carrySpeedMultiplier);
+            return carrySpeedMultiplier;
+        }
+
+        public void Teleport(Vector3 position)
         {
             _cc.enabled = false;
             transform.position = position;
@@ -269,6 +340,13 @@ namespace FriendSlop.Player
                 {
                     LocalHint = "E browse the gun shop";
                     if (controlling && kb.eKey.wasPressedThisFrame) ShopMenu.Open();
+                }
+                else if (LookAt<BossTotem>(BossTotem.InteractRange) is BossTotem totem && totem.BossSpecies != null)
+                {
+                    LocalHint = BossTotem.BossAlive
+                        ? $"{totem.BossSpecies.bossTitle} is already loose…"
+                        : $"E summon {totem.BossSpecies.bossTitle} (${totem.SummonCost:N0}, bounty ${totem.BossSpecies.bounty:N0})";
+                    if (!BossTotem.BossAlive && controlling && kb.eKey.wasPressedThisFrame) totem.RequestSummon();
                 }
                 else LocalHint = string.Empty;
                 return;

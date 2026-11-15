@@ -41,6 +41,7 @@ namespace FriendSlop.EditorTools
         const float CampClearRadius = 14f;
         static readonly Vector3 SellZonePos = new Vector3(8f, 0f, 0f);
         static readonly Vector3 GunShopPos = new Vector3(-11f, 0f, -1f);
+        static readonly Vector3 TotemPos = new Vector3(0f, 0f, -36f);
 
         static readonly Dictionary<string, Material> Mats = new Dictionary<string, Material>();
 
@@ -68,17 +69,22 @@ namespace FriendSlop.EditorTools
             Mats.Clear();
             CreateMaterials();
 
-            var rabbitSpecies = CreateRabbitSpecies();
             var catalog = WeaponCatalogBuilder.CreateOrUpdate();
             var pickup = BuildWeaponPickupPrefab(catalog);
             var player = BuildPlayerPrefab(catalog, pickup);
             var box = BuildBoxPrefab();
-            var rabbit = BuildRabbitPrefab(rabbitSpecies);
+            var animals = AnimalBuilder.BuildAll(name => Mats[name]);
             var gameState = BuildGameStatePrefab(catalog);
-            var spawner = BuildSpawnerPrefab(rabbit);
-            var prefabList = RegisterNetworkPrefabs(player, box, rabbit, gameState, spawner, pickup);
+            var spawner = BuildSpawnerPrefab();
+            GameObject bossPrefab = null;
+            foreach (var a in animals) if (a.Species.isBoss) bossPrefab = a.Prefab;
+            var totem = BuildTotemPrefab(bossPrefab);
 
-            BuildScene(player, box, gameState, spawner, prefabList, catalog);
+            var networked = new List<GameObject> { player, box, gameState, spawner, pickup, totem };
+            foreach (var a in animals) networked.Add(a.Prefab);
+            var prefabList = RegisterNetworkPrefabs(networked.ToArray());
+
+            BuildScene(player, box, gameState, spawner, totem, animals, prefabList, catalog);
 
             if (AssetDatabase.LoadAssetAtPath<SceneAsset>(OldM0ScenePath) != null)
                 AssetDatabase.DeleteAsset(OldM0ScenePath);
@@ -105,6 +111,12 @@ namespace FriendSlop.EditorTools
             Mat("Plank", lit, new Color(0.58f, 0.42f, 0.27f));
             Mat("Roof", lit, new Color(0.45f, 0.18f, 0.14f));
             Mat("Gunsmith", lit, new Color(0.7f, 0.3f, 0.2f));
+            Mat("Animal", lit, Color.white); // tinted per species at runtime
+            Mat("Stone", lit, new Color(0.42f, 0.42f, 0.46f));
+            Mat("Glow", unlit, new Color(1f, 0.45f, 0.15f));
+            var worldText = Shader.Find("FriendSlop/WorldText");
+            if (worldText != null) Mat("WorldText", worldText, Color.white);
+            else Debug.LogWarning("[FriendSlop] WorldText shader missing; signs will draw through walls.");
         }
 
         static Material Mat(string name, Shader shader, Color color)
@@ -122,21 +134,6 @@ namespace FriendSlop.EditorTools
             EditorUtility.SetDirty(mat);
             Mats[name] = mat;
             return mat;
-        }
-
-        static AnimalSpecies CreateRabbitSpecies()
-        {
-            string path = $"{DataDir}/Rabbit.asset";
-            var s = AssetDatabase.LoadAssetAtPath<AnimalSpecies>(path);
-            if (s == null)
-            {
-                s = ScriptableObject.CreateInstance<AnimalSpecies>();
-                AssetDatabase.CreateAsset(s, path);
-            }
-            // Keep any hand-tuned values; only fill identity on first creation.
-            if (string.IsNullOrEmpty(s.displayName)) s.displayName = "Rabbit";
-            EditorUtility.SetDirty(s);
-            return s;
         }
 
         // =========================================================== Prefabs
@@ -231,6 +228,8 @@ namespace FriendSlop.EditorTools
             so.FindProperty("pickupPrefab").objectReferenceValue = pickupPrefab;
             so.ApplyModifiedPropertiesWithoutUndo();
 
+            root.AddComponent<PlayerHealth>();
+
             return SavePrefab(root, $"{PrefabDir}/Player.prefab");
         }
 
@@ -256,76 +255,6 @@ namespace FriendSlop.EditorTools
             return SavePrefab(root, $"{PrefabDir}/PhysicsBox.prefab");
         }
 
-        static GameObject BuildRabbitPrefab(AnimalSpecies species)
-        {
-            var root = new GameObject("Rabbit");
-
-            var rb = root.AddComponent<Rigidbody>();
-            rb.mass = 2.5f;
-            rb.isKinematic = true;                                  // alive: the NavMeshAgent drives it
-            rb.interpolation = RigidbodyInterpolation.None;         // agent/network move the transform
-            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
-
-            var agent = root.AddComponent<NavMeshAgent>();
-            agent.radius = 0.25f;
-            agent.height = 0.5f;
-            agent.baseOffset = 0f;
-            agent.angularSpeed = 720f;
-            agent.acceleration = 30f;
-            agent.stoppingDistance = 0.2f;
-            agent.obstacleAvoidanceType = ObstacleAvoidanceType.LowQualityObstacleAvoidance;
-            agent.enabled = false; // the host enables it once spawned on the navmesh
-
-            root.AddComponent<NetworkObject>();
-            var nt = root.AddComponent<NetworkTransform>();
-            nt.AuthorityMode = NetworkTransform.AuthorityModes.Owner; // host owns it, carriers borrow it
-            nt.SyncScaleX = nt.SyncScaleY = nt.SyncScaleZ = false;
-            nt.Interpolate = true;
-
-            root.AddComponent<Carryable>();
-
-            // Colliders (static relative to root, so headshots don't depend on the hop animation)
-            var bodyCol = new GameObject("BodyHitbox");
-            bodyCol.transform.SetParent(root.transform, false);
-            var cap = bodyCol.AddComponent<CapsuleCollider>();
-            cap.direction = 2; // Z
-            cap.center = new Vector3(0f, 0.22f, 0f);
-            cap.radius = 0.16f;
-            cap.height = 0.5f;
-            bodyCol.AddComponent<Hitbox>();
-
-            var headCol = new GameObject("HeadHitbox");
-            headCol.transform.SetParent(root.transform, false);
-            var sph = headCol.AddComponent<SphereCollider>();
-            sph.center = new Vector3(0f, 0.37f, 0.24f);
-            sph.radius = 0.12f;
-            var headHb = headCol.AddComponent<Hitbox>();
-            var hso = new SerializedObject(headHb);
-            hso.FindProperty("isHead").boolValue = true;
-            hso.ApplyModifiedPropertiesWithoutUndo();
-
-            // Visuals (bobbed by the hop animation)
-            var visual = new GameObject("Visual").transform;
-            visual.SetParent(root.transform, false);
-            var body = Visual(PrimitiveType.Capsule, "Body", visual, new Vector3(0f, 0.22f, 0f), new Vector3(0.32f, 0.25f, 0.3f));
-            body.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            var head = Visual(PrimitiveType.Sphere, "Head", visual, new Vector3(0f, 0.37f, 0.24f), Vector3.one * 0.24f);
-            var earL = Visual(PrimitiveType.Cube, "EarL", visual, new Vector3(-0.05f, 0.53f, 0.22f), new Vector3(0.05f, 0.2f, 0.03f));
-            var earR = Visual(PrimitiveType.Cube, "EarR", visual, new Vector3(0.05f, 0.53f, 0.22f), new Vector3(0.05f, 0.2f, 0.03f));
-            Visual(PrimitiveType.Sphere, "Tail", visual, new Vector3(0f, 0.27f, -0.27f), Vector3.one * 0.11f, "Tail");
-
-            var animal = root.AddComponent<Animal>();
-            var so = new SerializedObject(animal);
-            so.FindProperty("species").objectReferenceValue = species;
-            so.FindProperty("visualRoot").objectReferenceValue = visual;
-            SetArray(so.FindProperty("furRenderers"),
-                body.GetComponent<Renderer>(), head.GetComponent<Renderer>(),
-                earL.GetComponent<Renderer>(), earR.GetComponent<Renderer>());
-            so.ApplyModifiedPropertiesWithoutUndo();
-
-            return SavePrefab(root, $"{PrefabDir}/Rabbit.prefab");
-        }
-
         static NetworkPrefabsList RegisterNetworkPrefabs(params GameObject[] prefabs)
         {
             // Use NGO's default list so its auto-registration and ours agree on a single asset.
@@ -337,6 +266,11 @@ namespace FriendSlop.EditorTools
                 list = ScriptableObject.CreateInstance<NetworkPrefabsList>();
                 AssetDatabase.CreateAsset(list, path);
             }
+            // Drop entries for prefabs that were deleted or moved (e.g. the old Rabbit prefab).
+            var stale = new List<NetworkPrefab>();
+            foreach (var entry in list.PrefabList) if (entry == null || entry.Prefab == null) stale.Add(entry);
+            foreach (var entry in stale) list.Remove(entry);
+
             foreach (var prefab in prefabs)
                 if (!list.Contains(prefab))
                     list.Add(new NetworkPrefab { Prefab = prefab });
@@ -357,19 +291,46 @@ namespace FriendSlop.EditorTools
             return SavePrefab(go, $"{PrefabDir}/GameState.prefab");
         }
 
-        static GameObject BuildSpawnerPrefab(GameObject rabbitPrefab)
+        /// <summary>Generic spawner; each scene instance overrides which animal prefab it spawns.</summary>
+        static GameObject BuildSpawnerPrefab()
         {
-            var go = new GameObject("RabbitSpawner");
+            if (AssetDatabase.LoadAssetAtPath<GameObject>($"{PrefabDir}/RabbitSpawner.prefab") != null)
+                AssetDatabase.DeleteAsset($"{PrefabDir}/RabbitSpawner.prefab"); // replaced by AnimalSpawner
+            var go = new GameObject("AnimalSpawner");
             go.AddComponent<NetworkObject>();
-            var spawner = go.AddComponent<AnimalSpawner>();
-            var so = new SerializedObject(spawner);
-            so.FindProperty("animalPrefab").objectReferenceValue = rabbitPrefab;
+            go.AddComponent<AnimalSpawner>();
+            return SavePrefab(go, $"{PrefabDir}/AnimalSpawner.prefab");
+        }
+
+        /// <summary>Standing stone with a glowing skull; pay to summon the boss.</summary>
+        static GameObject BuildTotemPrefab(GameObject bossPrefab)
+        {
+            var root = new GameObject("BossTotem");
+            var col = root.AddComponent<BoxCollider>();
+            col.size = new Vector3(1.4f, 3.4f, 1.4f);
+            col.center = new Vector3(0f, 1.7f, 0f);
+            root.AddComponent<NetworkObject>();
+            var totem = root.AddComponent<BossTotem>();
+            var so = new SerializedObject(totem);
+            so.FindProperty("bossPrefab").objectReferenceValue = bossPrefab;
             so.ApplyModifiedPropertiesWithoutUndo();
-            return SavePrefab(go, $"{PrefabDir}/RabbitSpawner.prefab");
+
+            Visual(PrimitiveType.Cube, "Base", root.transform, new Vector3(0f, 0.25f, 0f), new Vector3(2.2f, 0.5f, 2.2f), "Stone");
+            Visual(PrimitiveType.Cube, "Pillar", root.transform, new Vector3(0f, 1.8f, 0f), new Vector3(1.1f, 2.8f, 1.1f), "Stone");
+            Visual(PrimitiveType.Sphere, "Skull", root.transform, new Vector3(0f, 3.5f, 0f), Vector3.one * 0.9f, "Tail");
+            for (int e = -1; e <= 1; e += 2)
+            {
+                Visual(PrimitiveType.Cube, "Antler", root.transform, new Vector3(e * 0.7f, 4.1f, 0f), new Vector3(0.12f, 1.1f, 0.12f), "Tail")
+                    .transform.localRotation = Quaternion.Euler(0f, 0f, -e * 35f);
+                Visual(PrimitiveType.Sphere, "Eye", root.transform, new Vector3(e * 0.18f, 3.55f, 0.4f), Vector3.one * 0.16f, "Glow");
+            }
+
+            return SavePrefab(root, $"{PrefabDir}/BossTotem.prefab");
         }
 
         static void BuildScene(GameObject playerPrefab, GameObject boxPrefab, GameObject gameStatePrefab,
-                               GameObject spawnerPrefab, NetworkPrefabsList prefabList, WeaponCatalog catalog)
+                               GameObject spawnerPrefab, GameObject totemPrefab, List<AnimalBuilder.Built> animals,
+                               NetworkPrefabsList prefabList, WeaponCatalog catalog)
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
 
@@ -401,7 +362,7 @@ namespace FriendSlop.EditorTools
             for (int i = 0, placed = 0; i < 400 && placed < 90; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 6f);
-                if (p.magnitude < CampClearRadius || NearGunShop(p)) continue;
+                if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p)) continue;
                 Tree(trees, p, rng);
                 placed++;
             }
@@ -411,7 +372,7 @@ namespace FriendSlop.EditorTools
             for (int i = 0, placed = 0; i < 200 && placed < 28; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 6f);
-                if (p.magnitude < CampClearRadius - 4f || NearGunShop(p)) continue;
+                if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p)) continue;
                 Rock(rocks, p, rng);
                 placed++;
             }
@@ -446,6 +407,7 @@ namespace FriendSlop.EditorTools
 
             // ---------- Camp: trader + sell zone ----------
             var camp = new GameObject("Camp").transform;
+            camp.gameObject.AddComponent<SafeZone>(); // fighters stay away from camp
 
             var pad = Visual(PrimitiveType.Cube, "SellPad", camp, SellZonePos + new Vector3(0f, 0.05f, 0f), new Vector3(5f, 0.1f, 5f), "SellPad");
             var sell = new GameObject("SellZone");
@@ -483,6 +445,7 @@ namespace FriendSlop.EditorTools
             {
                 text.font = font;
                 sign.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+                AddWorldText(sign);
             }
 
             // A couple of physics boxes to mess around with at camp.
@@ -497,7 +460,23 @@ namespace FriendSlop.EditorTools
             // Placed as prefab instances: NGO only treats a NetworkObject as "in-scene placed" reliably
             // when it comes from a prefab (bare new GameObject + AddComponent gets rejected at host start).
             PrefabUtility.InstantiatePrefab(gameStatePrefab, scene);
-            PrefabUtility.InstantiatePrefab(spawnerPrefab, scene);
+
+            // One spawner per (non-boss) species; population/packs/distances come from the species asset.
+            var spawners = new GameObject("Spawners").transform;
+            foreach (var a in animals)
+            {
+                if (a.Species.isBoss || a.Species.population <= 0) continue;
+                var sp = (GameObject)PrefabUtility.InstantiatePrefab(spawnerPrefab, scene);
+                sp.name = $"Spawner_{a.Species.displayName}";
+                var sso = new SerializedObject(sp.GetComponent<AnimalSpawner>());
+                sso.FindProperty("animalPrefab").objectReferenceValue = a.Prefab;
+                sso.ApplyModifiedPropertiesWithoutUndo();
+                sp.transform.SetParent(spawners, true);
+            }
+
+            // The legendary totem at the north edge of the woods.
+            var totem = (GameObject)PrefabUtility.InstantiatePrefab(totemPrefab, scene);
+            totem.transform.SetPositionAndRotation(TotemPos, Quaternion.LookRotation(-TotemPos.normalized));
 
             var netGo = new GameObject("NetworkManager");
             var nm = netGo.AddComponent<NetworkManager>();
@@ -571,6 +550,9 @@ namespace FriendSlop.EditorTools
             rack.transform.localPosition = new Vector3(-2.75f, 1.0f, 0f);
             rack.transform.localRotation = Quaternion.LookRotation(Vector3.right); // faces customers
             var r = rack.AddComponent<WeaponRack>();
+            var rso = new SerializedObject(r);
+            rso.FindProperty("textMaterial").objectReferenceValue = Mats.TryGetValue("WorldText", out var wtm) ? wtm : null;
+            rso.ApplyModifiedPropertiesWithoutUndo();
             var so = new SerializedObject(r);
             so.FindProperty("catalog").objectReferenceValue = catalog;
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -578,7 +560,7 @@ namespace FriendSlop.EditorTools
             // Sign over the entrance, readable from camp
             var sign = new GameObject("Sign");
             sign.transform.SetParent(shop, false);
-            sign.transform.localPosition = new Vector3(3.1f, 3.95f, 0f);
+            sign.transform.localPosition = new Vector3(3.1f, 4.35f, 0f); // above the roof edge (text is depth-tested now)
             sign.transform.rotation = Quaternion.LookRotation(Vector3.left);
             var text = sign.AddComponent<TextMesh>();
             text.text = "GUN SHOP";
@@ -592,8 +574,21 @@ namespace FriendSlop.EditorTools
             {
                 text.font = font;
                 sign.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+                AddWorldText(sign);
             }
         }
+
+        /// <summary>Swap a TextMesh to the depth-tested, one-sided world text material.</summary>
+        static void AddWorldText(GameObject textGo)
+        {
+            if (!Mats.TryGetValue("WorldText", out var m)) return;
+            var wt = textGo.AddComponent<WorldText>();
+            var so = new SerializedObject(wt);
+            so.FindProperty("baseMaterial").objectReferenceValue = m;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        static bool NearTotem(Vector3 p) => (new Vector3(p.x, 0f, p.z) - TotemPos).magnitude < 6f;
 
         static bool NearGunShop(Vector3 p) =>
             Mathf.Abs(p.x - GunShopPos.x) < 7f && Mathf.Abs(p.z - GunShopPos.z) < 7.5f;
@@ -685,3 +680,4 @@ namespace FriendSlop.EditorTools
         }
     }
 }
+

@@ -350,6 +350,7 @@ GameObject:
   - component: {fileID: 6082850141819284314}
   - component: {fileID: 6676984002533415583}
   - component: {fileID: 3526264204758131753}
+  - component: {fileID: 8515731399258855782}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -412,7 +413,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 1644729869
+  GlobalObjectIdHash: 356196742
   InScenePlacedSourceGlobalObjectIdHash: 0
   m_InScenePlacedDisabledByDefault: 0
   DeferredDespawnTick: 0
@@ -521,3 +522,19 @@ MonoBehaviour:
   tracerMaterial: {fileID: 2100000, guid: 854db2a94578d3149bd80e7ac1babf8d, type: 2}
   hipFov: 75
   pickupPrefab: {fileID: 7853943569128859996, guid: 4277c682204ecec439be4f4d4ce81800, type: 3}
+--- !u!114 &8515731399258855782
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9101798273086166683}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 641d002ef384c7844a3eab0911505c90, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FriendSlop.Player.PlayerHealth
+  ShowTopMostFoldoutHeaderGroup: 1
+  respawnSeconds: 5
+  spawnProtectionSeconds: 3
+  respawnPoint: {x: 0, y: 0.2, z: -3}
