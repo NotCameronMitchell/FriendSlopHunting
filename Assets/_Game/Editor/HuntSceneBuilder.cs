@@ -551,7 +551,7 @@ namespace FriendSlop.EditorTools
             // Gunsmith behind the counter
             var smith = new GameObject("Gunsmith").transform;
             smith.SetParent(shop, false);
-            smith.localPosition = new Vector3(0.6f, 0.2f, 1.9f); // off to one side so the rack stays visible
+            smith.localPosition = new Vector3(0.9f, 0.2f, 3.1f); // off to one side so the rack stays visible
             smith.localRotation = Quaternion.LookRotation(Vector3.right);
             Npc(smith, "outfit_knight", "head_knight", "cowboy", "scarf", 9);
             smith.gameObject.AddComponent<GunShop>();

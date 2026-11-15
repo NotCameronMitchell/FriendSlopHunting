@@ -100,7 +100,7 @@ namespace FriendSlop.Profile
 
             var camGo = new GameObject("PreviewCamera");
             camGo.transform.SetParent(stage, false);
-            camGo.transform.localPosition = new Vector3(0f, 1.25f, 4.6f);
+            camGo.transform.localPosition = new Vector3(0f, 1.4f, 5.2f);
             camGo.transform.localRotation = Quaternion.Euler(4f, 180f, 0f);
             _camera = camGo.AddComponent<Camera>();
             _camera.targetTexture = _texture;

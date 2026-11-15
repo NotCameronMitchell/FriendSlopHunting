@@ -62,8 +62,9 @@ namespace FriendSlop.EditorTools
             // ---- anchors (measured at bind pose) ----
             var head = bones["head"];
             var chest = bones["chest"];
-            var headMesh = parts.First(p => p.name == "Rogue_Head").sharedMesh.bounds;
-            var bodyMesh = parts.First(p => p.name == "Rogue_Body").sharedMesh.bounds;
+            // Bake at bind pose: raw skinned-mesh bounds are in bind space, not rig space.
+            var headMesh = BakedBounds(parts.First(p => p.name == "Rogue_Head"));
+            var bodyMesh = BakedBounds(parts.First(p => p.name == "Rogue_Body"));
             float headScale = headMesh.size.x / 0.7f * 0.92f;
             float bodyScale = bodyMesh.size.x / 0.7f;
 
@@ -95,6 +96,16 @@ namespace FriendSlop.EditorTools
             Object.DestroyImmediate(rig);
             Debug.Log($"[Hunter] rig built: {parts.Length} parts, head {headMesh.size}, body {bodyMesh.size}");
             return prefab;
+        }
+
+        static Bounds BakedBounds(SkinnedMeshRenderer smr)
+        {
+            var m = new Mesh();
+            smr.BakeMesh(m, true);
+            var b = new Bounds(smr.transform.TransformPoint(m.vertices[0]), Vector3.zero);
+            foreach (var v in m.vertices) b.Encapsulate(smr.transform.TransformPoint(v));
+            Object.DestroyImmediate(m);
+            return b;
         }
 
         static Transform Anchor(string name, Transform bone, Vector3 rigSpacePos, float scale)

@@ -339,6 +339,14 @@ namespace FriendSlop.EditorTools
                     BuildTools.BuildWindowsZip();
                     Debug.Log("[Bridge] build-zip done");
                     break;
+                case "selftest-giveall":
+                {
+                    var pw = FriendSlop.Weapons.PlayerWeapons.Local;
+                    if (pw == null || !pw.IsServer) { Debug.LogWarning("[Bridge] selftest-giveall: host first"); return; }
+                    pw.Owned.Value = (1 << pw.Catalog.Count) - 1;
+                    Debug.Log($"[Bridge] gave all {pw.Catalog.Count} weapons");
+                    break;
+                }
                 case "selftest-zoo":
                 {
                     // Line up one of every species in front of the host for a photo (AI paused).

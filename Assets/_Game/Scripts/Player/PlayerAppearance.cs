@@ -106,6 +106,7 @@ namespace FriendSlop.Player
                 _body.SetShadowOnly(IsOwner);
             }
             _player.SetBodyColor(color);
+            if (IsOwner && TryGetComponent(out FriendSlop.Weapons.PlayerWeapons weapons)) weapons.RefreshModel(); // re-color your hands
         }
 
         static string ItemId(int index) =>

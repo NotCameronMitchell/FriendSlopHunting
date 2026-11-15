@@ -466,6 +466,9 @@ namespace FriendSlop.Weapons
             return dirs;
         }
 
+        /// <summary>Rebuild the held model (e.g. after the outfit color changed).</summary>
+        public void RefreshModel() { if (IsSpawned) RebuildModel(Equipped.Value); }
+
         void RebuildModel(int index)
         {
             if (gunHolder == null || catalog == null) return;
@@ -474,6 +477,13 @@ namespace FriendSlop.Weapons
             if (def == null) return;
             _muzzle = WeaponModelFactory.Build(def, gunHolder);
             _model = _muzzle.parent;
+            if (IsOwner)
+            {
+                // Your own chunky mitts on the gun, in your outfit color.
+                var look = GetComponent<FriendSlop.Player.PlayerAppearance>();
+                var color = FriendSlop.Profile.Cosmetics.BodyColor(look != null && look.IsSpawned ? look.ColorIndex.Value : -1, OwnerClientId);
+                WeaponModelFactory.AddHands(_model, Color.Lerp(color, Color.white, 0.15f));
+            }
             _boomerangOut = false;
         }
 
