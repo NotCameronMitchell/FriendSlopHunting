@@ -22,13 +22,13 @@ namespace FriendSlop.Player
 
         public static readonly Info[] Tracks =
         {
-            new Info { Name = "Sprinter", Description = "+8% move speed per tier.", Levels = new[] { 2, 5, 9 }, Costs = new[] { 150, 400, 900 } },
-            new Info { Name = "Thick Skin", Description = "+25 max health per tier.", Levels = new[] { 3, 6, 10 }, Costs = new[] { 200, 500, 1100 } },
-            new Info { Name = "Strong Back", Description = "Carry heavy carcasses faster and throw them farther.", Levels = new[] { 4, 8 }, Costs = new[] { 250, 700 } },
-            new Info { Name = "Spring Boots", Description = "+25% jump height per tier.", Levels = new[] { 2, 7 }, Costs = new[] { 120, 500 } },
-            new Info { Name = "Hollow Points", Description = "+15% weapon damage per tier.", Levels = new[] { 3, 6, 10 }, Costs = new[] { 250, 650, 1400 } },
-            new Info { Name = "Hair Trigger", Description = "+12% fire rate per tier.", Levels = new[] { 5, 9 }, Costs = new[] { 400, 1000 } },
-            new Info { Name = "Steady Hands", Description = "40% tighter spread.", Levels = new[] { 4 }, Costs = new[] { 350 } },
+            new Info { Name = "Sprinter", Description = "+8% move speed per tier.", Levels = new[] { 2, 5, 9 }, Costs = new[] { 400, 1100, 2600 } },
+            new Info { Name = "Thick Skin", Description = "+25 max health per tier.", Levels = new[] { 3, 6, 10 }, Costs = new[] { 500, 1300, 3000 } },
+            new Info { Name = "Strong Back", Description = "Carry heavy carcasses faster and throw them farther.", Levels = new[] { 4, 8 }, Costs = new[] { 600, 1800 } },
+            new Info { Name = "Spring Boots", Description = "+25% jump height per tier.", Levels = new[] { 2, 7 }, Costs = new[] { 300, 1300 } },
+            new Info { Name = "Hollow Points", Description = "+15% weapon damage per tier.", Levels = new[] { 3, 6, 10 }, Costs = new[] { 700, 1800, 4000 } },
+            new Info { Name = "Hair Trigger", Description = "+12% fire rate per tier.", Levels = new[] { 5, 9 }, Costs = new[] { 1100, 2800 } },
+            new Info { Name = "Steady Hands", Description = "40% tighter spread.", Levels = new[] { 4 }, Costs = new[] { 900 } },
         };
 
         // One field per track: Netcode only discovers NetworkVariables declared as fields (not inside arrays).

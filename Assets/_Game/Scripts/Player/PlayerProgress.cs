@@ -34,13 +34,15 @@ namespace FriendSlop.Player
         public void ServerCreditKill(AnimalSpecies species, ShotStyle style, bool elite = false)
         {
             if (!IsServer || species == null) return;
-            int xp = Mathf.RoundToInt(10 + species.basePrice * 0.6f);
-            if ((style & ShotStyle.Headshot) != 0) xp += 10;
-            if ((style & ShotStyle.LongShot) != 0) xp += 10;
-            if ((style & ShotStyle.JumpShot) != 0) xp += 15;
-            if (elite) xp *= 3;
-            if (species.isBoss) xp += 400;
-            if (species.shadowy) xp += 300;
+            // Economy v3: about half the old XP, so levels (and the upgrades they gate) take a few sessions.
+            // Skill still pays: style bonuses are a bigger share of the total than before.
+            int xp = Mathf.RoundToInt(5 + species.basePrice * 0.28f);
+            if ((style & ShotStyle.Headshot) != 0) xp += 6;
+            if ((style & ShotStyle.LongShot) != 0) xp += 6;
+            if ((style & ShotStyle.JumpShot) != 0) xp += 9;
+            if (elite) xp *= 2;
+            if (species.isBoss) xp += 250;
+            if (species.shadowy) xp += 150;
             KillCreditRpc(new FixedString32Bytes(species.displayName), (int)style, species.isBoss, xp);
         }
 

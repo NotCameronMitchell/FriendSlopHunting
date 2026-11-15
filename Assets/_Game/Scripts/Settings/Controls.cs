@@ -15,6 +15,7 @@ namespace FriendSlop.Settings
         PushToTalk, ToggleMute,
         Pause,
         UseProteinBar, UseEnergyDrink, Map,
+        Chat,
     }
 
     /// <summary>
@@ -76,6 +77,7 @@ namespace FriendSlop.Settings
             { GameAction.Pause, "Pause menu" },
             { GameAction.UseProteinBar, "Eat a protein bar" }, { GameAction.UseEnergyDrink, "Drink an energy drink" },
             { GameAction.Map, "Map" },
+            { GameAction.Chat, "Team chat" },
         };
 
         static readonly Dictionary<GameAction, Binding> Defaults = new Dictionary<GameAction, Binding>
@@ -90,6 +92,7 @@ namespace FriendSlop.Settings
             { GameAction.Pause, Binding.K(Key.Escape) },
             { GameAction.UseProteinBar, Binding.K(Key.Q) }, { GameAction.UseEnergyDrink, Binding.K(Key.X) },
             { GameAction.Map, Binding.K(Key.M) },
+            { GameAction.Chat, Binding.K(Key.T) },
         };
 
         static Dictionary<GameAction, Binding> _bindings;

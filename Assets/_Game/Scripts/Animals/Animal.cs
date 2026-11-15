@@ -179,11 +179,48 @@ namespace FriendSlop.Animals
 
         bool HitByMeRecently => Time.time - _localHitAt < 1.5f;
 
+        // The animal's real look, captured once before the first flash. Every flash restores to this,
+        // so a flash interrupted by another hit (or by death) can never leave it white or squashed.
+        Renderer[] _flashRenderers;
+        MaterialPropertyBlock[] _flashSaved;
+        Color[] _flashBase;
+        Vector3 _restScale;
+        bool _flashCaptured;
+
+        void CaptureLook()
+        {
+            if (_flashCaptured) return;
+            _flashCaptured = true;
+            _flashRenderers = visualRoot ? visualRoot.GetComponentsInChildren<Renderer>() : GetComponentsInChildren<Renderer>();
+            _flashSaved = new MaterialPropertyBlock[_flashRenderers.Length];
+            _flashBase = new Color[_flashRenderers.Length];
+            for (int i = 0; i < _flashRenderers.Length; i++)
+            {
+                var r = _flashRenderers[i];
+                if (!r) continue;
+                _flashSaved[i] = new MaterialPropertyBlock();
+                r.GetPropertyBlock(_flashSaved[i]);
+                var m = r.sharedMaterial;
+                _flashBase[i] = _flashSaved[i].HasColor(BaseColorId) ? _flashSaved[i].GetColor(BaseColorId)
+                    : m != null && m.HasProperty(BaseColorId) ? m.GetColor(BaseColorId) : Color.white;
+            }
+            _restScale = visualRoot ? visualRoot.localScale : Vector3.one;
+        }
+
+        void RestoreLook()
+        {
+            if (!_flashCaptured) return;
+            for (int i = 0; i < _flashRenderers.Length; i++)
+                if (_flashRenderers[i] && _flashSaved[i] != null) _flashRenderers[i].SetPropertyBlock(_flashSaved[i].isEmpty ? null : _flashSaved[i]);
+            if (visualRoot) visualRoot.localScale = _restScale;
+        }
+
         void OnHealthChanged(float previous, float current)
         {
             if (current >= previous) return;
-            if (_flash != null) StopCoroutine(_flash);
-            _flash = StartCoroutine(HitFlash(current <= 0f ? 1.6f : 1f));
+            CaptureLook();
+            if (_flash != null) { StopCoroutine(_flash); RestoreLook(); }
+            if (isActiveAndEnabled) _flash = StartCoroutine(HitFlash(current <= 0f ? 0f : 1f)); // no squash on the killing hit: the ragdoll takes over
             if (HitByMeRecently && species != null)
             {
                 float dmg = (previous - current) * species.maxHealth * (Elite.Value ? EliteHealth : 1f);
@@ -192,23 +229,15 @@ namespace FriendSlop.Animals
             }
         }
 
+        void OnDisable() { if (_flash != null) { _flash = null; RestoreLook(); } }
+
         IEnumerator HitFlash(float strength)
         {
-            var renderers = visualRoot ? visualRoot.GetComponentsInChildren<Renderer>() : GetComponentsInChildren<Renderer>();
-            var saved = new MaterialPropertyBlock[renderers.Length];
-            var baseCols = new Color[renderers.Length];
-            for (int i = 0; i < renderers.Length; i++)
-            {
-                var r = renderers[i];
-                if (!r) continue;
-                saved[i] = new MaterialPropertyBlock();
-                r.GetPropertyBlock(saved[i]);
-                var m = r.sharedMaterial;
-                baseCols[i] = saved[i].HasColor(BaseColorId) ? saved[i].GetColor(BaseColorId)
-                    : m != null && m.HasProperty(BaseColorId) ? m.GetColor(BaseColorId) : Color.white;
-            }
+            var renderers = _flashRenderers;
+            var saved = _flashSaved;
+            var baseCols = _flashBase;
             Transform squash = visualRoot;
-            Vector3 restScale = squash ? squash.localScale : Vector3.one;
+            Vector3 restScale = _restScale;
             var block = new MaterialPropertyBlock();
             const float dur = 0.22f;
             for (float t = 0f; t < dur; t += Time.deltaTime)
@@ -231,9 +260,7 @@ namespace FriendSlop.Animals
                 }
                 yield return null;
             }
-            for (int i = 0; i < renderers.Length; i++)
-                if (renderers[i] && saved[i] != null) renderers[i].SetPropertyBlock(saved[i].isEmpty ? null : saved[i]);
-            if (squash) squash.localScale = restScale;
+            RestoreLook();
             _flash = null;
         }
 
@@ -434,7 +461,7 @@ namespace FriendSlop.Animals
                 else
                 {
                     Vector3 knock = dir * species.knockback + Vector3.up * species.knockback * 0.45f;
-                    _target.ServerDamage(species.attackDamage * (Elite.Value ? EliteDamage : 1f), knock, species.isBoss ? species.bossTitle : DisplayName);
+                    _target.ServerDamage(species.attackDamage * (Elite.Value ? EliteDamage : 1f), knock, species.isBoss ? species.bossTitle : DisplayName, boss: species.isBoss);
                 }
                 AttackRpc();
             }
@@ -615,9 +642,10 @@ namespace FriendSlop.Animals
         // ============================== Damage ==============================
 
         /// <summary>Server: apply a validated hit from a player.</summary>
-        public void ServerApplyHit(float damage, Vector3 direction, ShotStyle style, ulong shooterId)
+        public void ServerApplyHit(float damage, Vector3 direction, ShotStyle style, ulong shooterId, string weapon = null)
         {
             if (!IsServer) return;
+            if (!string.IsNullOrEmpty(weapon)) _lastWeapon = weapon;
 
             if (IsDead.Value)
             {
@@ -647,8 +675,20 @@ namespace FriendSlop.Animals
             ServerDie(direction, style, shooterId);
         }
 
+        string _lastWeapon = "";
+
         void ServerDie(Vector3 direction, ShotStyle style, ulong shooterId)
         {
+            {
+                var flags = GameState.Feed.None;
+                if ((style & ShotStyle.Headshot) != 0) flags |= GameState.Feed.Headshot;
+                if ((style & ShotStyle.LongShot) != 0) flags |= GameState.Feed.LongShot;
+                if ((style & ShotStyle.JumpShot) != 0) flags |= GameState.Feed.JumpShot;
+                if (species.isBoss || species.shadowy) flags |= GameState.Feed.Boss;
+                if (Elite.Value) flags |= GameState.Feed.Elite;
+                GameState.Instance?.ServerKillFeed(shooterId, GameState.PlayerName(shooterId), _lastWeapon, GameState.NoPlayer,
+                    species.isBoss ? species.bossTitle : DisplayName, flags);
+            }
             KillStyle.Value = (int)style;
             IsDead.Value = true;
             IsAngry.Value = false;
@@ -683,10 +723,8 @@ namespace FriendSlop.Animals
                 return;
             }
 
-            string styleText = StyleDescription;
-            GameState.Instance?.ServerAnnounce(string.IsNullOrEmpty(styleText)
-                ? $"{who} bagged {(Elite.Value && species.Fights ? "an" : "a")} {DisplayName}!"
-                : $"{who} bagged {(Elite.Value && species.Fights ? "an" : "a")} {DisplayName}! {styleText}");
+            // Everyday kills go to the kill feed only (the toast feed is kept for big moments).
+            if (Elite.Value) GameState.Instance?.ServerAnnounce($"{who} bagged {(species.Fights ? "an" : "a")} {DisplayName}!");
         }
 
         void ServerJuggle(Vector3 direction)

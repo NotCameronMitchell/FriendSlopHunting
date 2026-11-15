@@ -29,33 +29,33 @@ namespace FriendSlop.EditorTools
             });
             yield return ("Revolver", w =>
             {
-                Name(w, "Revolver", 60, "Six-shooter energy. Slow, hits like a truck.", WeaponModel.Revolver);
+                Name(w, "Revolver", 250, "Six-shooter energy. Slow, hits like a truck.", WeaponModel.Revolver);
                 Fire(w, WeaponKind.Hitscan, FireMode.Semi, 0.6f, 75f, 3f, spread: 1f, aimSpread: 0.15f, range: 150f);
                 Feel(w, ShotSound.HeavyGunshot, 0.9f, 0.8f, recoil: 5f, impulse: 14f, aimFov: 55f, noise: 35f);
             });
             yield return ("Slingshot", w =>
             {
-                Name(w, "Slingshot", 40, "Bonk. Quiet enough to sneak up on things.", WeaponModel.Slingshot);
+                Name(w, "Slingshot", 150, "Bonk. Quiet enough to sneak up on things.", WeaponModel.Slingshot);
                 Fire(w, WeaponKind.Projectile, FireMode.Semi, 0.5f, 25f, 2f, spread: 0.5f, aimSpread: 0.2f, range: 80f);
                 Feel(w, ShotSound.Slingshot, 1f, 0.6f, recoil: 1f, impulse: 12f, aimFov: 60f, noise: 6f);
                 w.projectileSpeed = 32f; w.projectileGravity = 12f; w.tracer = false;
             });
             yield return ("Uzi", w =>
             {
-                Name(w, "Uzi", 150, "Brrrt. Sprays everything within spitting distance.", WeaponModel.Uzi);
+                Name(w, "Uzi", 650, "Brrrt. Sprays everything within spitting distance.", WeaponModel.Uzi);
                 Fire(w, WeaponKind.Hitscan, FireMode.Auto, 0.07f, 12f, 2.5f, spread: 4f, aimSpread: 2f, range: 70f);
                 Feel(w, ShotSound.LightGunshot, 1.4f, 0.45f, recoil: 0.8f, impulse: 4f, aimFov: 62f, noise: 35f);
             });
             yield return ("Shotgun", w =>
             {
-                Name(w, "Shotgun", 180, "Eight pellets. The ultimate carcass-juggling tool.", WeaponModel.Shotgun);
+                Name(w, "Shotgun", 800, "Eight pellets. The ultimate carcass-juggling tool.", WeaponModel.Shotgun);
                 Fire(w, WeaponKind.Hitscan, FireMode.Semi, 0.8f, 18f, 2f, spread: 4f, aimSpread: 2f, range: 60f);
                 w.pellets = 8;
                 Feel(w, ShotSound.HeavyGunshot, 0.8f, 0.9f, recoil: 7f, impulse: 7f, aimFov: 62f, noise: 40f);
             });
             yield return ("Boomerang", w =>
             {
-                Name(w, "Boomerang", 120, "Hits on the way out AND on the way back. Catch it!", WeaponModel.Boomerang);
+                Name(w, "Boomerang", 450, "Hits on the way out AND on the way back. Catch it!", WeaponModel.Boomerang);
                 Fire(w, WeaponKind.Boomerang, FireMode.Semi, 0.3f, 45f, 2f, spread: 0f, aimSpread: 0f, range: 40f);
                 Feel(w, ShotSound.Throw, 1f, 0.6f, recoil: 0.5f, impulse: 10f, aimFov: 65f, noise: 8f);
                 w.projectileSpeed = 22f; w.boomerangRange = 18f; w.tracer = false;
@@ -63,7 +63,7 @@ namespace FriendSlop.EditorTools
             });
             yield return ("Bow", w =>
             {
-                Name(w, "Bow", 220, "Silent. Animals won't hear you coming. Arrows drop over distance.", WeaponModel.Bow);
+                Name(w, "Bow", 1000, "Silent. Animals won't hear you coming. Arrows drop over distance.", WeaponModel.Bow);
                 Fire(w, WeaponKind.Projectile, FireMode.Semi, 0.9f, 80f, 3f, spread: 0.5f, aimSpread: 0f, range: 150f);
                 Feel(w, ShotSound.Bow, 1f, 0.7f, recoil: 1f, impulse: 10f, aimFov: 50f, noise: 0f);
                 w.projectileSpeed = 48f; w.projectileGravity = 9.81f; w.tracer = false;
@@ -71,20 +71,20 @@ namespace FriendSlop.EditorTools
             });
             yield return ("BoltRifle", w =>
             {
-                Name(w, "Bolt Rifle", 300, "Scoped, long range. Headshots basically always kill.", WeaponModel.Rifle);
+                Name(w, "Bolt Rifle", 1500, "Scoped, long range. Headshots basically always kill.", WeaponModel.Rifle);
                 Fire(w, WeaponKind.Hitscan, FireMode.Semi, 0.9f, 60f, 8f, spread: 0.8f, aimSpread: 0f, range: 250f);
                 Feel(w, ShotSound.Gunshot, 1f, 0.75f, recoil: 4f, impulse: 16f, aimFov: 30f, noise: 40f);
             });
             yield return ("MachineGun", w =>
             {
-                Name(w, "Machine Gun", 500, "Accurate sustained fire. Keep that carcass in the air.", WeaponModel.MachineGun);
+                Name(w, "Machine Gun", 2800, "Accurate sustained fire. Keep that carcass in the air.", WeaponModel.MachineGun);
                 Fire(w, WeaponKind.Hitscan, FireMode.Auto, 0.1f, 20f, 2.5f, spread: 2.5f, aimSpread: 1f, range: 150f);
                 Feel(w, ShotSound.Gunshot, 1.1f, 0.55f, recoil: 1.2f, impulse: 6f, aimFov: 50f, noise: 45f);
                 w.tint = new Color(0.35f, 0.4f, 0.22f);
             });
             yield return ("Minigun", w =>
             {
-                Name(w, "Minigun", 1000, "Hold to spin up. Then: absolute chaos.", WeaponModel.Minigun);
+                Name(w, "Minigun", 6000, "Hold to spin up. Then: absolute chaos.", WeaponModel.Minigun);
                 Fire(w, WeaponKind.Hitscan, FireMode.Auto, 0.035f, 12f, 2f, spread: 3.5f, aimSpread: 3f, range: 120f);
                 w.spinUpTime = 0.9f;
                 Feel(w, ShotSound.Gunshot, 1.5f, 0.4f, recoil: 0.5f, impulse: 4f, aimFov: 65f, noise: 50f);
@@ -92,7 +92,7 @@ namespace FriendSlop.EditorTools
             });
             yield return ("Bazooka", w =>
             {
-                Name(w, "Bazooka", 1500, "Rocket with a big boom. Everything nearby goes flying.", WeaponModel.Bazooka);
+                Name(w, "Bazooka", 9000, "Rocket with a big boom. Everything nearby goes flying.", WeaponModel.Bazooka);
                 Fire(w, WeaponKind.Projectile, FireMode.Semi, 1.5f, 100f, 1f, spread: 0.5f, aimSpread: 0.2f, range: 200f);
                 Feel(w, ShotSound.Rocket, 1f, 0.9f, recoil: 8f, impulse: 20f, aimFov: 55f, noise: 60f);
                 w.projectileSpeed = 30f; w.projectileGravity = 2f; w.tracer = false;
@@ -100,6 +100,14 @@ namespace FriendSlop.EditorTools
                 w.tint = new Color(0.25f, 0.35f, 0.2f);
             });
         }
+
+        /// <summary>Economy v3 prices (old price → new). Roughly: early guns a few hunts, the big toys a long-term team goal.</summary>
+        static readonly Dictionary<string, (int old, int now)> NewPrices = new Dictionary<string, (int old, int now)>
+        {
+            { "Revolver", (60, 250) }, { "Slingshot", (40, 150) }, { "Uzi", (150, 650) }, { "Shotgun", (180, 800) },
+            { "Boomerang", (120, 450) }, { "Bow", (220, 1000) }, { "BoltRifle", (300, 1500) }, { "MachineGun", (500, 2800) },
+            { "Minigun", (1000, 6000) }, { "Bazooka", (1500, 9000) },
+        };
 
         public static WeaponCatalog CreateOrUpdate()
         {
@@ -119,6 +127,12 @@ namespace FriendSlop.EditorTools
                 if (file == "Shotgun" && def.damage < 17f && def.spread > 3.9f)
                 {
                     def.damage = 18f; def.spread = 4f; def.aimSpread = 2f; def.range = 60f;
+                    EditorUtility.SetDirty(def);
+                }
+                // v3 economy: guns were far too cheap for how fast the team earns. Reprice anything still at its old price.
+                if (NewPrices.TryGetValue(file, out var price) && def.price == price.old)
+                {
+                    def.price = price.now;
                     EditorUtility.SetDirty(def);
                 }
                 list.Add(def);

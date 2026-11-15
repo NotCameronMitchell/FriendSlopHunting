@@ -8,7 +8,7 @@ namespace FriendSlop.Game
     /// </summary>
     public static class GameMenus
     {
-        public enum Menu { None, Shop, Inventory, Pause, Options }
+        public enum Menu { None, Shop, Inventory, Pause, Options, Chat }
 
         public static Menu Open { get; private set; } = Menu.None;
         public static bool AnyOpen => Open != Menu.None;

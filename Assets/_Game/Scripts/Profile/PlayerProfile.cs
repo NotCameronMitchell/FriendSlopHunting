@@ -14,7 +14,7 @@ namespace FriendSlop.Profile
     [Serializable]
     public class PlayerProfile
     {
-        public const float BucksPerDollar = 0.25f; // you bank 25% of every team sale
+        public const float BucksPerDollar = 0.15f; // you bank 15% of every team sale (economy v3: was 25%)
 
         public string displayName = "";
         public int bucks;
@@ -216,7 +216,7 @@ namespace FriendSlop.Profile
             lifetimeBucks += Mathf.Max(1, Mathf.RoundToInt(dollars * BucksPerDollar));
             CheckAchievements();
             Save();
-            AddXp(Mathf.Max(1, dollars / 4)); // selling levels you up too
+            AddXp(Mathf.Max(1, dollars / 10)); // selling levels you up too (economy v3: was dollars / 4)
         }
 
         /// <summary>Unlock any achievement whose condition is now met (and its reward).</summary>

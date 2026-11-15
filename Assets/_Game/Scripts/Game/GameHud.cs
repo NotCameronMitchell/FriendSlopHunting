@@ -105,8 +105,10 @@ namespace FriendSlop.Game
             if (state == null || !state.IsSpawned)
             {
                 _lastMoney = -1;
+                if (ChatOpen) GameMenus.Reset();
                 return;
             }
+            UpdateChatInput();
 
             int money = state.Money.Value;
             if (_lastMoney >= 0 && money > _lastMoney)
@@ -125,8 +127,159 @@ namespace FriendSlop.Game
             _lastMoney = money;
         }
 
+        // ------------------------------------------------------------------ kill feed + chat
+        // Kill feed (top right, Overwatch/TF2 style): killer ▸ weapon ▸ victim, headshots marked,
+        // your own lines highlighted, hunter deaths in red. Chat (bottom left): T or Enter to talk,
+        // Enter to send, Esc to cancel; lines fade after a while but all come back while typing.
+
+        struct FeedLine { public string Killer, Weapon, Victim; public GameState.Feed Flags; public bool Mine, MeDied; public float Born; }
+        readonly List<FeedLine> _feed = new List<FeedLine>();
+        struct ChatLine { public string Name, Text; public Color Color; public float Born; }
+        readonly List<ChatLine> _chat = new List<ChatLine>();
+        string _chatText = "";
+        int _chatOpenedFrame = -1;
+        GUIStyle _feedStyle, _chatStyle, _chatInput;
+        const float FeedSeconds = 7f, ChatSeconds = 12f;
+
+        static readonly Color[] NameColors =
+        {
+            new Color(1f, 0.72f, 0.3f), new Color(0.45f, 0.85f, 1f), new Color(0.6f, 1f, 0.5f), new Color(1f, 0.55f, 0.75f),
+            new Color(0.8f, 0.65f, 1f), new Color(1f, 0.92f, 0.45f), new Color(0.4f, 1f, 0.85f), new Color(1f, 0.6f, 0.45f),
+        };
+        static Color NameColor(ulong id) => NameColors[(int)(id % (ulong)NameColors.Length)];
+
+        public static bool ChatOpen => GameMenus.Open == GameMenus.Menu.Chat;
+
+        void OnKillFeed(ulong killerId, string killer, string weapon, ulong victimId, string victim, GameState.Feed flags)
+        {
+            ulong me = Unity.Netcode.NetworkManager.Singleton != null ? Unity.Netcode.NetworkManager.Singleton.LocalClientId : GameState.NoPlayer;
+            _feed.Add(new FeedLine { Killer = killer, Weapon = weapon, Victim = victim, Flags = flags, Born = Time.unscaledTime,
+                Mine = killerId == me, MeDied = victimId == me });
+            if (_feed.Count > 6) _feed.RemoveAt(0);
+        }
+
+        void OnChat(ulong sender, string name, string text)
+        {
+            _chat.Add(new ChatLine { Name = name, Text = text, Color = NameColor(sender), Born = Time.unscaledTime });
+            if (_chat.Count > 30) _chat.RemoveAt(0);
+            FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.UiHover, 0.5f, 0.8f);
+        }
+
+        void UpdateChatInput()
+        {
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb == null || ChatOpen || GameMenus.AnyOpen || NetworkPlayer.Local == null || OptionsMenu.IsCapturingKey) return;
+            if (FriendSlop.Settings.Controls.Pressed(FriendSlop.Settings.GameAction.Chat) || kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)
+            {
+                _chatText = "";
+                _chatOpenedFrame = Time.frameCount;
+                GameMenus.Show(GameMenus.Menu.Chat);
+            }
+        }
+
+        void DrawFeed()
+        {
+            float now = Time.unscaledTime;
+            _feed.RemoveAll(f => now - f.Born > FeedSeconds);
+            if (_feed.Count == 0) return;
+            _feedStyle ??= new GUIStyle(UiTheme.HudLabel) { fontSize = 16, alignment = TextAnchor.MiddleLeft, richText = true };
+            var prev = GUI.color;
+            float y = 150f;
+            for (int i = 0; i < _feed.Count; i++)
+            {
+                var f = _feed[i];
+                float t = now - f.Born;
+                float k = EaseOutBack(t / 0.3f);
+                float a = Mathf.Clamp01((FeedSeconds - t) / 0.8f) * Mathf.Clamp01(t / 0.1f);
+                string killerCol = f.Mine ? "#FFD34F" : "#FFF4DD";
+                string victimCol = (f.Flags & GameState.Feed.PlayerDown) != 0 ? "#FF7A6A" : (f.Flags & GameState.Feed.Boss) != 0 ? "#FF9F45" : "#FFF4DD";
+                string weapon = string.IsNullOrEmpty(f.Weapon) ? "▸" : $"<color=#C9BFAE>[{f.Weapon}]</color>";
+                string tags = "";
+                if ((f.Flags & GameState.Feed.Headshot) != 0) tags += " <color=#FF5544>◎</color>";
+                if ((f.Flags & GameState.Feed.LongShot) != 0) tags += " <color=#8FD8FF>↗</color>";
+                if ((f.Flags & GameState.Feed.JumpShot) != 0) tags += " <color=#B8FF8A>⤴</color>";
+                string text = (f.Flags & GameState.Feed.PlayerDown) != 0 && string.IsNullOrEmpty(f.Weapon)
+                    ? $"<color={killerCol}>{f.Killer}</color>  ☠  <color={victimCol}>{f.Victim}</color>"
+                    : $"<color={killerCol}>{f.Killer}</color>  {weapon}{tags}  <color={victimCol}>{f.Victim}</color>";
+                float w = _feedStyle.CalcSize(new GUIContent(text)).x + 26f;
+                var r = new Rect(Screen.width - 14f - w + (1f - k) * 60f, y, w, 28f);
+                GUI.color = f.MeDied ? new Color(1f, 0.45f, 0.4f, a) : f.Mine ? new Color(1f, 0.8f, 0.4f, a) : new Color(1f, 1f, 1f, a * 0.9f);
+                UiTheme.Pill(r);
+                GUI.color = new Color(1f, 1f, 1f, a);
+                UiTheme.Shadow(new Rect(r.x + 13f, r.y, r.width - 13f, r.height), text, _feedStyle);
+                y += 32f;
+            }
+            GUI.color = prev;
+        }
+
+        void DrawChat()
+        {
+            float now = Time.unscaledTime;
+            bool open = ChatOpen;
+            _chatStyle ??= new GUIStyle(UiTheme.HudLabel) { fontSize = 15, alignment = TextAnchor.MiddleLeft, richText = true, wordWrap = true };
+            var prev = GUI.color;
+            float w = Mathf.Min(520f, Screen.width * 0.4f);
+            float bottom = Screen.height - 160f;
+            if (open)
+            {
+                var box = new Rect(14f, bottom - 6f, w, 34f);
+                UiTheme.Panel(box);
+                _chatInput ??= new GUIStyle(GUI.skin.textField) { fontSize = 15, alignment = TextAnchor.MiddleLeft };
+                var e = Event.current;
+                if (e.type == EventType.KeyDown && (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter))
+                {
+                    if (Time.frameCount != _chatOpenedFrame)
+                    {
+                        GameState.Instance?.SendChat(_chatText);
+                        _chatText = "";
+                        GameMenus.Close();
+                    }
+                    e.Use();
+                }
+                else if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape) { _chatText = ""; GameMenus.Close(); e.Use(); }
+                if (ChatOpen)
+                {
+                    GUI.SetNextControlName("fsh_chat");
+                    _chatText = GUI.TextField(new Rect(box.x + 8f, box.y + 5f, box.width - 16f, 24f), _chatText, GameState.ChatMaxLength, _chatInput);
+                    GUI.FocusControl("fsh_chat");
+                    if (Time.frameCount == _chatOpenedFrame) _chatText = ""; // drop the T / Enter that opened it
+                    if (_chatText.Length == 0)
+                    {
+                        GUI.color = new Color(1f, 1f, 1f, 0.45f);
+                        GUI.Label(new Rect(box.x + 14f, box.y + 5f, box.width, 24f), "Say something to the team…  (Enter send · Esc cancel)", UiTheme.Small);
+                        GUI.color = prev;
+                    }
+                }
+                bottom -= 12f;
+            }
+            float y = bottom;
+            for (int i = _chat.Count - 1; i >= 0 && i >= _chat.Count - (open ? 12 : 6); i--)
+            {
+                var c = _chat[i];
+                float t = now - c.Born;
+                float a = open ? 1f : Mathf.Clamp01((ChatSeconds - t) / 1.5f);
+                if (a <= 0f) continue;
+                string hex = ColorUtility.ToHtmlStringRGB(c.Color);
+                string text = $"<color=#{hex}><b>{c.Name}</b></color>  {Escape(c.Text)}";
+                float h = Mathf.Max(24f, _chatStyle.CalcHeight(new GUIContent(text), w - 20f) + 4f);
+                y -= h + 2f;
+                float k = EaseOutCubic(t / 0.2f);
+                var r = new Rect(14f - (1f - k) * 20f, y, w, h);
+                GUI.color = new Color(1f, 1f, 1f, a * 0.85f);
+                UiTheme.Pill(r);
+                GUI.color = new Color(1f, 1f, 1f, a);
+                UiTheme.Shadow(new Rect(r.x + 10f, r.y, r.width - 20f, r.height), text, _chatStyle);
+            }
+            GUI.color = prev;
+        }
+
+        /// <summary>Stop players from injecting rich-text tags into chat.</summary>
+        static string Escape(string s) => s.Replace("<", "‹").Replace(">", "›");
+
         void OnEnable()
         {
+            GameState.KillFeed += OnKillFeed;
+            GameState.ChatMessage += OnChat;
             GameState.Announced += OnAnnounced;
             FriendSlop.Profile.PlayerProfile.AchievementUnlocked += OnAchievement;
             FriendSlop.Profile.PlayerProfile.LevelUp += OnLevelUp;
@@ -149,6 +302,8 @@ namespace FriendSlop.Game
         }
         void OnDisable()
         {
+            GameState.KillFeed -= OnKillFeed;
+            GameState.ChatMessage -= OnChat;
             GameState.Announced -= OnAnnounced;
             FriendSlop.Profile.PlayerProfile.AchievementUnlocked -= OnAchievement;
             FriendSlop.Profile.PlayerProfile.LevelUp -= OnLevelUp;
@@ -221,6 +376,8 @@ namespace FriendSlop.Game
             DrawCrosshair();
             DrawKill();
             DrawBanner();
+            DrawFeed();
+            DrawChat();
 
             // Announcement feed: pills under the boss bar, newest at the bottom, fading out.
             float now = Time.unscaledTime;

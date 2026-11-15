@@ -273,7 +273,7 @@ namespace FriendSlop.World
             ulong driver = rpcParams.Receive.SenderClientId;
             if (SeatOf(driver) != 0 || !target.TryGet(out NetworkObject obj) || !obj.TryGetComponent(out Animal animal)) return;
             if ((obj.transform.position - transform.position).sqrMagnitude > 8f * 8f) return;
-            animal.ServerApplyHit(Mathf.Clamp(velocity.magnitude * 60f, 250f, 800f), (velocity.normalized + Vector3.up).normalized, ShotStyle.None, driver);
+            animal.ServerApplyHit(Mathf.Clamp(velocity.magnitude * 60f, 250f, 800f), (velocity.normalized + Vector3.up).normalized, ShotStyle.None, driver, "Tank");
             SquishRpc(obj.transform.position);
         }
 

@@ -261,6 +261,24 @@ namespace FriendSlop.EditorTools
                 Debug.Log($"[Bridge] near → {a[0]} #{nth} at {tp}");
                 return;
             }
+            if (cmd.StartsWith("chat "))
+            {
+                // chat hello team : send a chat line as the local player.
+                FriendSlop.Game.GameState.Instance?.SendChat(cmd.Substring(5));
+                Debug.Log("[Bridge] chat sent");
+                return;
+            }
+            if (cmd.StartsWith("die-test "))
+            {
+                // die-test moose : the local player gets taken down by that attacker (host only).
+                var hp = FriendSlop.Player.PlayerHealth.Local;
+                if (hp == null || !hp.IsServer) { Debug.LogWarning("[Bridge] die-test: host first"); return; }
+                string who = cmd.Substring(9).Trim();
+                who = who.Length > 0 ? char.ToUpperInvariant(who[0]) + who.Substring(1) : "Moose";
+                hp.ServerDamage(9999f, Vector3.zero, who);
+                Debug.Log($"[Bridge] die-test by {who}");
+                return;
+            }
             if (cmd.StartsWith("shoot-zoo "))
             {
                 // shoot-zoo deer 12 head : put a live zoo animal 12 m ahead and fire the equipped gun at its body (or head).
@@ -902,6 +920,25 @@ namespace FriendSlop.EditorTools
                     var aim = deer.transform.position + Vector3.up * (deer.Species.legLength + deer.Species.bodyHeight * 0.5f) * deer.Species.scale;
                     pw.TestFireAt(aim);
                     Debug.Log($"[Bridge] shotgun fired at deer 18 m (equipped {pw.Current?.displayName})");
+                    break;
+                }
+                case "cloud-check":
+                {
+                    // Smallest gap between any cloud's belly and the ground under it (should stay > ~30 m).
+                    float worst = float.MaxValue; string at = "";
+                    foreach (var r in UnityEngine.Object.FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+                    {
+                        if (r.gameObject.name != "Cloud") continue;
+                        var b = r.bounds; float g = float.MinValue;
+                        for (int i = 0; i < 5; i++)
+                        {
+                            var p = i == 0 ? b.center : new Vector3(i % 2 == 0 ? b.min.x : b.max.x, 0f, i < 3 ? b.min.z : b.max.z);
+                            g = Mathf.Max(g, FriendSlop.World.Ground.HeightAt(p));
+                        }
+                        float gap = b.min.y - g;
+                        if (gap < worst) { worst = gap; at = $"{b.center} ground {g:0}"; }
+                    }
+                    Debug.Log($"[Bridge] cloud-check → worst gap {worst:0.0} m at {at}");
                     break;
                 }
                 case "banner-test":

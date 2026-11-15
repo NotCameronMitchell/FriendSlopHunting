@@ -465,7 +465,7 @@ namespace FriendSlop.Weapons
             if (airborne) style |= ShotStyle.JumpShot;
 
             float damage = (head ? def.damage * def.headshotMultiplier : def.damage) * (_upgrades ? _upgrades.DamageMult : 1f);
-            animal.ServerApplyHit(damage, (point - origin).normalized, style, OwnerClientId);
+            animal.ServerApplyHit(damage, (point - origin).normalized, style, OwnerClientId, def.displayName);
         }
 
         /// <summary>Host: friendly fire. Only when the lobby allows it; same sanity checks as animal hits.</summary>
@@ -480,7 +480,7 @@ namespace FriendSlop.Weapons
             if ((obj.transform.position + Vector3.up - point).sqrMagnitude > 3f * 3f) return;
             bool head = point.y - obj.transform.position.y > 1.45f;
             float damage = def.damage * (_upgrades ? _upgrades.DamageMult : 1f) * FriendSlop.Game.LobbySettings.PlayerDamageScale * (head ? 1.5f : 1f);
-            victim.ServerDamage(damage, (point - origin).normalized * 3f, $"{def.displayName} (thanks, {FriendSlop.Game.GameState.PlayerName(OwnerClientId)})");
+            victim.ServerDamage(damage, (point - origin).normalized * 3f, def.displayName, OwnerClientId, def.displayName);
         }
 
         [Rpc(SendTo.Server)]

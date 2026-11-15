@@ -36,7 +36,7 @@ namespace FriendSlop.Game
         [SerializeField] GameObject tankPrefab;
         [SerializeField] Vector3 garagePosition = new Vector3(-12f, 0f, -14f);
         [SerializeField] float garageYaw = 0f;
-        public const int TankPrice = 2500;
+        public const int TankPrice = 7500;
 
         /// <summary>Ask for the team tank: buys it (team money), or recalls an empty one to the garage for free.</summary>
         public void RequestTank() => TankRpc();
@@ -194,6 +194,65 @@ namespace FriendSlop.Game
             if (!IsServer) return;
             Money.Value += amount;
             AnnounceRpc(announcement);
+        }
+
+        // ------------------------------------------------------------------ kill feed
+
+        public const ulong NoPlayer = ulong.MaxValue;
+        [Flags] public enum Feed { None = 0, Headshot = 1, LongShot = 2, JumpShot = 4, Boss = 8, PlayerDown = 16, Elite = 32 }
+
+        /// <summary>Raised on every peer: (killerId or NoPlayer, killer name, weapon, victimId or NoPlayer, victim name, flags).</summary>
+        public static event Action<ulong, string, string, ulong, string, Feed> KillFeed;
+
+        /// <summary>Server: add a line to everyone's kill feed.</summary>
+        public void ServerKillFeed(ulong killerId, string killer, string weapon, ulong victimId, string victim, Feed flags)
+        {
+            if (IsServer) KillFeedRpc(killerId, killer ?? "", weapon ?? "", victimId, victim ?? "", (int)flags);
+        }
+
+        [Rpc(SendTo.Everyone)]
+        void KillFeedRpc(ulong killerId, string killer, string weapon, ulong victimId, string victim, int flags)
+            => KillFeed?.Invoke(killerId, killer, weapon, victimId, victim, (Feed)flags);
+
+        // ------------------------------------------------------------------ text chat
+
+        public const int ChatMaxLength = 120;
+        /// <summary>Raised on every peer: (sender id, sender name, message).</summary>
+        public static event Action<ulong, string, string> ChatMessage;
+        readonly System.Collections.Generic.Dictionary<ulong, float> _chatNext = new System.Collections.Generic.Dictionary<ulong, float>();
+
+        /// <summary>Client: say something in team chat.</summary>
+        public void SendChat(string text)
+        {
+            text = Clean(text);
+            if (text.Length > 0) ChatServerRpc(text);
+        }
+
+        static string Clean(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            var sb = new System.Text.StringBuilder(text.Length);
+            foreach (char c in text) if (!char.IsControl(c)) sb.Append(c);
+            string s = sb.ToString().Trim();
+            return s.Length > ChatMaxLength ? s.Substring(0, ChatMaxLength) : s;
+        }
+
+        [Rpc(SendTo.Server)]
+        void ChatServerRpc(string text, RpcParams rpcParams = default)
+        {
+            ulong sender = rpcParams.Receive.SenderClientId;
+            text = Clean(text);
+            if (text.Length == 0) return;
+            if (_chatNext.TryGetValue(sender, out float next) && Time.time < next) return; // light spam guard
+            _chatNext[sender] = Time.time + 0.4f;
+            ChatRpc(sender, PlayerName(sender), text);
+        }
+
+        [Rpc(SendTo.Everyone)]
+        void ChatRpc(ulong sender, string name, string text)
+        {
+            Debug.Log($"[Chat] {name}: {text}");
+            ChatMessage?.Invoke(sender, name, text);
         }
 
         /// <summary>Server only: broadcast a message to every player's HUD.</summary>

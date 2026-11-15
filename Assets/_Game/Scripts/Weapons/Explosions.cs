@@ -30,7 +30,7 @@ namespace FriendSlop.Weapons
                     float dist = Vector3.Distance(center, animal.transform.position);
                     float falloff = Mathf.Clamp01(1f - dist / def.explosionRadius);
                     Vector3 dir = (animal.transform.position - center + Vector3.up * 0.5f).normalized;
-                    animal.ServerApplyHit(def.explosionDamage * dmgMult * (0.35f + 0.65f * falloff), dir, ShotStyle.None, shooterId);
+                    animal.ServerApplyHit(def.explosionDamage * dmgMult * (0.35f + 0.65f * falloff), dir, ShotStyle.None, shooterId, def.displayName);
                     continue;
                 }
 
@@ -44,7 +44,7 @@ namespace FriendSlop.Weapons
                     bool self = player.OwnerClientId == shooterId;
                     if (!self && FriendSlop.Game.GameState.FriendlyFireOn)
                         player.ServerDamage(def.explosionDamage * FriendSlop.Game.LobbySettings.PlayerDamageScale * (0.3f + 0.7f * falloff), blast,
-                            $"{def.displayName} (thanks, {FriendSlop.Game.GameState.PlayerName(shooterId)})");
+                            def.displayName, shooterId, def.displayName);
                     else player.ServerShove(blast);
                     continue;
                 }

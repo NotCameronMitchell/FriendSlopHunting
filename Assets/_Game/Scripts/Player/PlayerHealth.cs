@@ -58,7 +58,9 @@ namespace FriendSlop.Player
         // ============================================================ Host
 
         /// <summary>Host: hurt this player. Returns true if it took them down.</summary>
-        public bool ServerDamage(float amount, Vector3 knockback, string attacker)
+        /// <param name="attacker">What hurt them (an animal's name, "skunk stink", or the weapon for friendly fire).</param>
+        /// <param name="killerId">The player who did it (friendly fire), else NoPlayer.</param>
+        public bool ServerDamage(float amount, Vector3 knockback, string attacker, ulong killerId = GameState.NoPlayer, string weapon = null, bool boss = false)
         {
             if (!IsServer || IsDown.Value || Time.time < _protectedUntil || amount <= 0f) return false;
 
@@ -71,7 +73,11 @@ namespace FriendSlop.Player
             IsDown.Value = true;
             _serverRespawnAt = Time.time + respawnSeconds;
             DownedRpc(respawnSeconds);
-            GameState.Instance?.ServerAnnounce($"{GameState.PlayerName(OwnerClientId)} got wrecked by a {attacker}!");
+            string victim = GameState.PlayerName(OwnerClientId);
+            string killer = killerId != GameState.NoPlayer ? GameState.PlayerName(killerId) : null;
+            GameState.Instance?.ServerAnnounce(DeathLines.Pick(victim, attacker, killer, weapon, boss));
+            GameState.Instance?.ServerKillFeed(killerId, killer ?? attacker, weapon ?? "", OwnerClientId, victim,
+                GameState.Feed.PlayerDown | (boss ? GameState.Feed.Boss : GameState.Feed.None));
             return true;
         }
 

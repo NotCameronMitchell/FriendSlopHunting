@@ -205,17 +205,48 @@ namespace FriendSlop.World
                 list.Add(go.transform);
             }
             _clouds = list.ToArray();
+            _cloudBaseY = new float[_clouds.Length];
+            _cloudDepth = new float[_clouds.Length];
+            for (int i = 0; i < _clouds.Length; i++)
+            {
+                _cloudBaseY[i] = _clouds[i].position.y;
+                var b = _clouds[i].GetComponent<MeshRenderer>().bounds;
+                _cloudDepth[i] = _clouds[i].position.y - b.min.y; // how far the puffs hang below the pivot
+            }
+        }
+
+        float[] _cloudBaseY, _cloudDepth;
+        const float CloudClearance = 38f; // metres between a cloud's belly and the ground (or rock pillars) under it
+
+        /// <summary>Highest ground under a cloud's footprint (centre + four corners of its bounds).</summary>
+        static float GroundUnder(Bounds b)
+        {
+            float h = Ground.HeightAt(b.center);
+            h = Mathf.Max(h, Ground.HeightAt(new Vector3(b.min.x, 0f, b.min.z)));
+            h = Mathf.Max(h, Ground.HeightAt(new Vector3(b.max.x, 0f, b.min.z)));
+            h = Mathf.Max(h, Ground.HeightAt(new Vector3(b.min.x, 0f, b.max.z)));
+            h = Mathf.Max(h, Ground.HeightAt(new Vector3(b.max.x, 0f, b.max.z)));
+            return h;
         }
 
         void UpdateClouds(float day, float horizon)
         {
             if (_cloudMat == null) return;
             float dt = Time.deltaTime;
-            foreach (var c in _clouds)
+            for (int i = 0; i < _clouds.Length; i++)
             {
+                var c = _clouds[i];
                 var p = c.position + Wind * dt;
-                if (p.x > CloudWrap) p.x -= CloudWrap * 2f;
-                if (p.z > CloudWrap) p.z -= CloudWrap * 2f;
+                bool wrapped = false;
+                if (p.x > CloudWrap) { p.x -= CloudWrap * 2f; wrapped = true; }
+                if (p.z > CloudWrap) { p.z -= CloudWrap * 2f; wrapped = true; }
+                // Ride up over mountains so a cloud never sinks into a peak, then settle back to its own height.
+                var b = c.GetComponent<MeshRenderer>().bounds;
+                b.center += p - c.position;
+                float needed = GroundUnder(b) + CloudClearance + _cloudDepth[i];
+                float target = Mathf.Max(_cloudBaseY[i], needed);
+                p.y = wrapped || p.y < needed ? Mathf.Max(p.y, needed) : Mathf.MoveTowards(p.y, target, dt * 3f);
+                if (wrapped) p.y = target;
                 c.position = p;
             }
             Color dayLit = Color.white, dayShade = new Color(0.72f, 0.78f, 0.9f);
