@@ -330,6 +330,80 @@ namespace FriendSlop.Player
         /// <summary>Kick the camera up; it settles back on its own. Owner only.</summary>
         public void AddRecoil(float degrees) => _recoil += degrees;
 
+        // ------------------------------------------------------------------ camera feel
+        // Trauma-based shake (Perlin noise, so it rolls instead of jitters), head bob while walking,
+        // a dip when you land, and a small FOV push while sprinting. All scaled by the player's
+        // Screen shake / Head bob settings, since shake is the effect people most often turn off.
+
+        float _trauma, _bobPhase, _bobBlend, _landDip, _landVel, _airMinVy, _sprintBlend;
+        bool _wasGrounded = true;
+
+        /// <summary>0..1 how much the local player is walking (for the gun bob).</summary>
+        public float BobBlend => _bobBlend;
+        /// <summary>Walk cycle phase in radians (two steps per cycle).</summary>
+        public float BobPhase => _bobPhase;
+        /// <summary>Extra field of view while sprinting (degrees, added by the weapon FOV logic).</summary>
+        public float FovBonus => _sprintBlend * 6f * (GameSettings.HeadBob ? 1f : 0.5f);
+
+        /// <summary>Shake the local player's camera. trauma 0..1 (0.15 a gunshot, 0.5 an explosion nearby, 1 a tank shell to the face).</summary>
+        public static void Shake(float trauma)
+        {
+            if (Local == null) return;
+            Local._trauma = Mathf.Clamp01(Local._trauma + trauma);
+        }
+
+        /// <summary>Shake scaled by distance from the local player (explosions, boss slams).</summary>
+        public static void ShakeAt(Vector3 position, float trauma, float radius)
+        {
+            if (Local == null) return;
+            float d = Vector3.Distance(Local.transform.position, position);
+            if (d < radius) Shake(trauma * (1f - d / radius));
+        }
+
+        void TrackLanding(bool grounded, float sprinting, float moveAmount)
+        {
+            if (!grounded) _airMinVy = Mathf.Min(_airMinVy, _verticalVelocity);
+            else if (!_wasGrounded)
+            {
+                float impact = Mathf.InverseLerp(4f, 18f, -_airMinVy);
+                if (impact > 0f)
+                {
+                    _landVel -= 1.4f + impact * 2.2f; // spring kick downward
+                    if (impact > 0.4f) Shake(impact * 0.35f);
+                    SfxPlayer.Play2D(Sfx.Thud, 0.15f + impact * 0.35f, 1.15f - impact * 0.3f);
+                }
+                _airMinVy = 0f;
+            }
+            _wasGrounded = grounded;
+            float targetBob = grounded ? moveAmount : 0f;
+            _bobBlend = Mathf.MoveTowards(_bobBlend, targetBob, Time.deltaTime * 6f);
+            _sprintBlend = Mathf.MoveTowards(_sprintBlend, grounded ? sprinting * moveAmount : _sprintBlend, Time.deltaTime * 4f);
+        }
+
+        void ApplyCameraFeel()
+        {
+            if (!cameraPivot) return;
+            float dt = Time.deltaTime;
+            // Landing spring (critically-ish damped).
+            _landVel += (-_landDip * 90f - _landVel * 14f) * dt;
+            _landDip += _landVel * dt;
+
+            float shakeAmt = _trauma * _trauma * GameSettings.ScreenShake;
+            _trauma = Mathf.Max(0f, _trauma - dt * 1.4f);
+            float t = Time.time * 22f;
+            float sx = (Mathf.PerlinNoise(t, 0.1f) * 2f - 1f) * 4f * shakeAmt;
+            float sy = (Mathf.PerlinNoise(0.3f, t) * 2f - 1f) * 4f * shakeAmt;
+            float sz = (Mathf.PerlinNoise(t, 7.7f) * 2f - 1f) * 6f * shakeAmt;
+
+            bool bob = GameSettings.HeadBob;
+            float amp = bob ? Mathf.Lerp(0.03f, 0.055f, _sprintBlend) * _bobBlend : 0f;
+            Vector3 offset = new Vector3(Mathf.Sin(_bobPhase) * amp * 0.6f, Mathf.Abs(Mathf.Cos(_bobPhase)) * amp - amp * 0.5f, 0f);
+            offset.y += _landDip * 0.06f;
+            float roll = bob ? Mathf.Sin(_bobPhase) * 0.5f * _bobBlend : 0f;
+            cameraPivot.localPosition = _pivotRestPos + offset;
+            cameraPivot.localRotation = Quaternion.Euler(_pitch - _recoil + sx - _landDip * 1.2f, sy, sz + roll);
+        }
+
         void Update()
         {
             if (!IsSpawned) return;
@@ -412,8 +486,8 @@ namespace FriendSlop.Player
 
             if (controlling) Look(Mouse.current.delta.ReadValue());
             _recoil = Mathf.Lerp(_recoil, 0f, Time.deltaTime * 9f);
-            if (cameraPivot) cameraPivot.localRotation = Quaternion.Euler(_pitch - _recoil, 0f, 0f);
             Move(controlling);
+            ApplyCameraFeel();
             UpdateCarry(controlling);
         }
 
@@ -481,6 +555,13 @@ namespace FriendSlop.Player
             _verticalVelocity += gravity * Time.deltaTime;
 
             _cc.Move((horizontal + Vector3.up * _verticalVelocity) * Time.deltaTime);
+            if (controlling || _bobBlend > 0f)
+            {
+                bool sprinting = controlling && Controls.Held(GameAction.Sprint);
+                float moveAmount = input.magnitude;
+                _bobPhase += Time.deltaTime * moveAmount * speed * 1.35f; // ~two steps per cycle at walking pace
+                TrackLanding(_cc.isGrounded, sprinting ? 1f : 0f, moveAmount);
+            }
 
             // Safety net while testing: fell off the world.
             if (transform.position.y < -30f) Teleport(Vector3.up * 2f);

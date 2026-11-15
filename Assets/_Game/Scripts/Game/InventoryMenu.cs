@@ -59,16 +59,16 @@ namespace FriendSlop.Game
                 GUILayout.FlexibleSpace();
                 GUILayout.BeginVertical(GUILayout.Width(90));
                 GUI.enabled = !equipped;
-                if (GUILayout.Button("Equip", GUILayout.Height(24))) weapons.RequestEquip(index);
+                if (FriendSlop.Game.UiTheme.Btn("Equip", GUILayout.Height(24))) weapons.RequestEquip(index);
                 GUI.enabled = index != 0;
-                if (GUILayout.Button(index == 0 ? "Permanent" : "Drop", GUILayout.Height(24))) weapons.RequestDrop(index);
+                if (FriendSlop.Game.UiTheme.Btn(index == 0 ? "Permanent" : "Drop", GUILayout.Height(24))) weapons.RequestDrop(index);
                 GUI.enabled = true;
                 GUILayout.EndVertical();
                 GUILayout.EndHorizontal();
             }
             GUILayout.EndScrollView();
 
-            if (GUILayout.Button("Close (Tab / Esc)", GUILayout.Height(28))) GameMenus.Close();
+            if (FriendSlop.Game.UiTheme.Btn("Close (Tab / Esc)", GUILayout.Height(28))) GameMenus.Close();
             GUILayout.EndArea();
         }
 

@@ -92,9 +92,9 @@ namespace FriendSlop.Net
             {
                 GUILayout.Label($"Signed in as {SteamService.PersonaName}");
                 GUI.enabled = !_steam.IsBusy;
-                if (GUILayout.Button("Host on Steam", GUILayout.Height(32))) _steam.Host();
+                if (FriendSlop.Game.UiTheme.Btn("Host on Steam", GUILayout.Height(32))) _steam.Host();
                 GUI.enabled = !_steam.IsSearching;
-                if (GUILayout.Button(_steam.IsSearching ? "Searching…" : "Find hunts", GUILayout.Height(26))) _steam.Refresh();
+                if (FriendSlop.Game.UiTheme.Btn(_steam.IsSearching ? "Searching…" : "Find hunts", GUILayout.Height(26))) _steam.Refresh();
                 GUI.enabled = true;
 
                 _lobbyScroll = GUILayout.BeginScrollView(_lobbyScroll, GUILayout.Height(110));
@@ -104,7 +104,7 @@ namespace FriendSlop.Net
                     GUILayout.BeginHorizontal();
                     GUILayout.Label($"{entry.Name}  ({entry.Members}/{entry.MaxMembers}){(entry.FriendlyFire ? "  · friendly fire" : "")}");
                     GUI.enabled = !_steam.IsBusy;
-                    if (GUILayout.Button("Join", GUILayout.Width(60))) _steam.Join(entry.Lobby);
+                    if (FriendSlop.Game.UiTheme.Btn("Join", GUILayout.Width(60))) _steam.Join(entry.Lobby);
                     GUI.enabled = true;
                     GUILayout.EndHorizontal();
                 }
@@ -115,17 +115,17 @@ namespace FriendSlop.Net
 
             // ---- Direct ----
             GUILayout.Label("<b>Direct</b> (same PC / LAN / Tailscale)", new GUIStyle(GUI.skin.label) { richText = true });
-            if (GUILayout.Button("Host", GUILayout.Height(28))) _net.HostDirect();
+            if (FriendSlop.Game.UiTheme.Btn("Host", GUILayout.Height(28))) _net.HostDirect();
             GUILayout.BeginHorizontal();
             GUILayout.Label("Host IP", GUILayout.Width(55));
             _address = GUILayout.TextField(_address);
             GUILayout.EndHorizontal();
-            if (GUILayout.Button("Join", GUILayout.Height(28))) _net.JoinDirect(_address);
+            if (FriendSlop.Game.UiTheme.Btn("Join", GUILayout.Height(28))) _net.JoinDirect(_address);
 
             GUILayout.Space(10);
-            if (GUILayout.Button("Customize hunter", GUILayout.Height(28))) FriendSlop.Profile.CustomizeMenu.IsOpen = true;
-            if (GUILayout.Button("Options", GUILayout.Height(28))) FriendSlop.Game.OptionsMenu.OpenFromMainMenu = true;
-            if (GUILayout.Button("Quit", GUILayout.Height(28))) Application.Quit();
+            if (FriendSlop.Game.UiTheme.Btn("Customize hunter", GUILayout.Height(28))) FriendSlop.Profile.CustomizeMenu.IsOpen = true;
+            if (FriendSlop.Game.UiTheme.Btn("Options", GUILayout.Height(28))) FriendSlop.Game.OptionsMenu.OpenFromMainMenu = true;
+            if (FriendSlop.Game.UiTheme.Btn("Quit", GUILayout.Height(28))) Application.Quit();
 
             GUILayout.FlexibleSpace();
             GUILayout.Label($"Status: {_net.Status}", _wrap);
@@ -154,16 +154,16 @@ namespace FriendSlop.Net
                 GUILayout.Label("WASD move · Shift sprint · Space jump\nLeft click shoot · Right click aim · 1-0/scroll switch\nE interact / pick up · Left click throw (carrying)\nTab inventory · G drop weapon · Esc pause / options");
                 if (nm.IsHost && _net.Backend == NetBackend.Steam && _steam != null && _steam.Current.HasValue)
                 {
-                    if (GUILayout.Button("Invite friends (Steam overlay)", GUILayout.Height(26))) _steam.OpenInviteOverlay();
+                    if (FriendSlop.Game.UiTheme.Btn("Invite friends (Steam overlay)", GUILayout.Height(26))) _steam.OpenInviteOverlay();
                 }
-                if (GUILayout.Button("Leave", GUILayout.Height(28))) _net.Leave();
+                if (FriendSlop.Game.UiTheme.Btn("Leave", GUILayout.Height(28))) _net.Leave();
             }
             GUILayout.EndArea();
 
             if (!cursorFree)
             {
                 var c = new Vector2(Screen.width / 2f, Screen.height / 2f);
-                GUI.Label(new Rect(c.x - 5, c.y - 12, 20, 24), "+");
+                // The crosshair is drawn by GameHud (animated, with spread and hit markers).
             }
         }
     }

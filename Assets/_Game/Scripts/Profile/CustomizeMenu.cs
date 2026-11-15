@@ -45,7 +45,7 @@ namespace FriendSlop.Profile
             GUILayout.Label("Name", _label, GUILayout.Width(60));
             string typed = GUILayout.TextField(_nameField ?? "", 24, GUILayout.Width(260), GUILayout.Height(26));
             if (typed != _nameField) _nameField = typed;
-            if (GUILayout.Button("Save", GUILayout.Width(70), GUILayout.Height(26)))
+            if (FriendSlop.Game.UiTheme.Btn("Save", GUILayout.Width(70), GUILayout.Height(26)))
             {
                 p.displayName = _nameField.Trim();
                 p.Save();
@@ -77,7 +77,7 @@ namespace FriendSlop.Profile
             GUILayout.EndScrollView();
 
             GUILayout.Space(6);
-            if (GUILayout.Button("Back", GUILayout.Height(34), GUILayout.Width(140))) IsOpen = false;
+            if (FriendSlop.Game.UiTheme.Btn("Back", GUILayout.Height(34), GUILayout.Width(140))) IsOpen = false;
             GUILayout.EndArea();
 
             // ---------------- right: preview + wallet ----------------
@@ -125,17 +125,17 @@ namespace FriendSlop.Profile
                 if (equipped)
                 {
                     GUI.enabled = false;
-                    GUILayout.Button("Equipped", GUILayout.Width(120), GUILayout.Height(30));
+                    FriendSlop.Game.UiTheme.Btn("Equipped", GUILayout.Width(120), GUILayout.Height(30));
                     GUI.enabled = true;
                 }
                 else if (unlocked)
                 {
-                    if (GUILayout.Button("Equip", GUILayout.Width(120), GUILayout.Height(30))) Equip(item, p);
+                    if (FriendSlop.Game.UiTheme.Btn("Equip", GUILayout.Width(120), GUILayout.Height(30))) Equip(item, p);
                 }
                 else if (item.Unlock == UnlockKind.Bucks)
                 {
                     GUI.enabled = p.bucks >= item.Cost;
-                    if (GUILayout.Button($"Buy {item.Cost:N0}", GUILayout.Width(120), GUILayout.Height(30)) && p.TrySpend(item.Cost))
+                    if (FriendSlop.Game.UiTheme.Btn($"Buy {item.Cost:N0}", GUILayout.Width(120), GUILayout.Height(30)) && p.TrySpend(item.Cost))
                     {
                         p.Grant(item.Id);
                         Equip(item, p);
@@ -145,7 +145,7 @@ namespace FriendSlop.Profile
                 else
                 {
                     GUI.enabled = false;
-                    GUILayout.Button("Locked", GUILayout.Width(120), GUILayout.Height(30));
+                    FriendSlop.Game.UiTheme.Btn("Locked", GUILayout.Width(120), GUILayout.Height(30));
                     GUI.enabled = true;
                 }
                 GUILayout.EndHorizontal();
@@ -156,7 +156,7 @@ namespace FriendSlop.Profile
                 GUILayout.Space(4);
                 bool auto = p.colorIndex < 0;
                 GUI.enabled = !auto;
-                if (GUILayout.Button(auto ? "Auto color (current)" : "Use auto color", GUILayout.Width(200), GUILayout.Height(28)))
+                if (FriendSlop.Game.UiTheme.Btn(auto ? "Auto color (current)" : "Use auto color", GUILayout.Width(200), GUILayout.Height(28)))
                 {
                     p.colorIndex = -1;
                     p.Save();
@@ -220,7 +220,7 @@ namespace FriendSlop.Profile
         void TabButton(Tab tab, string label)
         {
             GUI.color = _tab == tab ? new Color(1f, 0.85f, 0.4f) : Color.white;
-            if (GUILayout.Button(label, GUILayout.Height(30))) { _tab = tab; _scroll = Vector2.zero; }
+            if (FriendSlop.Game.UiTheme.Btn(label, GUILayout.Height(30))) { _tab = tab; _scroll = Vector2.zero; }
             GUI.color = Color.white;
         }
 

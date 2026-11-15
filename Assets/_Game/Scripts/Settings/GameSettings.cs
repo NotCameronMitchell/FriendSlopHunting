@@ -22,6 +22,8 @@ namespace FriendSlop.Settings
         public static float MouseSensitivity { get => GetF("sens", 0.12f); set => SetF("sens", Mathf.Clamp(value, 0.02f, 0.6f)); }
         public static bool InvertY { get => GetB("invertY", false); set => SetB("invertY", value); }
         public static float FieldOfView { get => GetF("fov", 75f); set => SetF("fov", Mathf.Clamp(value, 60f, 100f)); }
+        public static float ScreenShake { get => GetF("shake", 1f); set => SetF("shake", Mathf.Clamp01(value)); }
+        public static bool HeadBob { get => GetB("headBob", true); set => SetB("headBob", value); }
 
         // Voice (used by proximity voice chat once it lands; the toggles already work today)
         public static bool PushToTalk { get => GetB("ptt", true); set => SetB("ptt", value); }
@@ -32,7 +34,7 @@ namespace FriendSlop.Settings
 
         public static void ResetToDefaults()
         {
-            foreach (var key in new[] { "master", "sfx", "voice", "sens", "invertY", "fov", "ptt", "micMuted" })
+            foreach (var key in new[] { "master", "sfx", "voice", "sens", "invertY", "fov", "shake", "headBob", "ptt", "micMuted" })
                 PlayerPrefs.DeleteKey(Prefix + key);
             PlayerPrefs.Save();
             Apply();

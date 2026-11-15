@@ -129,6 +129,7 @@ namespace FriendSlop.Animals
             _lastPos = transform.position;
             IsDead.OnValueChanged += OnDeadChanged;
             Juggles.OnValueChanged += OnJugglesChanged;
+            HealthFraction.OnValueChanged += OnHealthChanged;
 
             if (IsServer)
             {
@@ -158,13 +159,93 @@ namespace FriendSlop.Animals
             All.Remove(this);
             IsDead.OnValueChanged -= OnDeadChanged;
             Juggles.OnValueChanged -= OnJugglesChanged;
+            HealthFraction.OnValueChanged -= OnHealthChanged;
+        }
+
+        // ------------------------------------------------------------------ hit feedback
+        // Every peer sees a hit animal flash white and squash; the shooter also gets a damage
+        // number at the hit point and a kill confirm when it drops.
+
+        float _localHitAt = -10f;
+        Vector3 _localHitPoint;
+        bool _localHitHead;
+        Coroutine _flash;
+
+        /// <summary>Local shooter: remember where we hit this animal (for damage numbers / kill confirm).</summary>
+        public void NoteLocalHit(Vector3 point, bool head)
+        {
+            _localHitAt = Time.time; _localHitPoint = point; _localHitHead = head;
+        }
+
+        bool HitByMeRecently => Time.time - _localHitAt < 1.5f;
+
+        void OnHealthChanged(float previous, float current)
+        {
+            if (current >= previous) return;
+            if (_flash != null) StopCoroutine(_flash);
+            _flash = StartCoroutine(HitFlash(current <= 0f ? 1.6f : 1f));
+            if (HitByMeRecently && species != null)
+            {
+                float dmg = (previous - current) * species.maxHealth * (Elite.Value ? EliteHealth : 1f);
+                FriendSlop.Game.GameHud.Popup(_localHitPoint, Mathf.Max(1, Mathf.RoundToInt(dmg)).ToString(),
+                    _localHitHead ? new Color(1f, 0.85f, 0.25f) : Color.white, _localHitHead ? 1.25f : 1f);
+            }
+        }
+
+        IEnumerator HitFlash(float strength)
+        {
+            var renderers = visualRoot ? visualRoot.GetComponentsInChildren<Renderer>() : GetComponentsInChildren<Renderer>();
+            var saved = new MaterialPropertyBlock[renderers.Length];
+            var baseCols = new Color[renderers.Length];
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var r = renderers[i];
+                if (!r) continue;
+                saved[i] = new MaterialPropertyBlock();
+                r.GetPropertyBlock(saved[i]);
+                var m = r.sharedMaterial;
+                baseCols[i] = saved[i].HasColor(BaseColorId) ? saved[i].GetColor(BaseColorId)
+                    : m != null && m.HasProperty(BaseColorId) ? m.GetColor(BaseColorId) : Color.white;
+            }
+            Transform squash = visualRoot;
+            Vector3 restScale = squash ? squash.localScale : Vector3.one;
+            var block = new MaterialPropertyBlock();
+            const float dur = 0.22f;
+            for (float t = 0f; t < dur; t += Time.deltaTime)
+            {
+                float k = t / dur;
+                float white = k < 0.3f ? 1f : 1f - (k - 0.3f) / 0.7f;
+                for (int i = 0; i < renderers.Length; i++)
+                {
+                    var r = renderers[i];
+                    if (!r || saved[i] == null) continue;
+                    r.GetPropertyBlock(block);
+                    var c = Color.Lerp(baseCols[i], new Color(1f, 1f, 1f, baseCols[i].a), white * 0.85f);
+                    block.SetColor(BaseColorId, c); block.SetColor(ColorId, c);
+                    r.SetPropertyBlock(block);
+                }
+                if (squash)
+                {
+                    float s = Mathf.Sin(k * Mathf.PI) * 0.18f * strength * (1f - k);
+                    squash.localScale = new Vector3(restScale.x * (1f + s), restScale.y * (1f - s), restScale.z * (1f + s));
+                }
+                yield return null;
+            }
+            for (int i = 0; i < renderers.Length; i++)
+                if (renderers[i] && saved[i] != null) renderers[i].SetPropertyBlock(saved[i].isEmpty ? null : saved[i]);
+            if (squash) squash.localScale = restScale;
+            _flash = null;
         }
 
         void OnDeadChanged(bool previous, bool dead)
         {
             ApplyDeadVisuals(dead);
             if (dead && !previous)
+            {
                 PlayVoice(VoiceKind.Death);
+                if (HitByMeRecently && species != null)
+                    FriendSlop.Game.GameHud.ShowKill(species.isBoss ? species.bossTitle : species.displayName, (ShotStyle)KillStyle.Value, SaleValue, species.isBoss ? species.bounty : 0);
+            }
         }
 
         void OnJugglesChanged(int previous, int current)

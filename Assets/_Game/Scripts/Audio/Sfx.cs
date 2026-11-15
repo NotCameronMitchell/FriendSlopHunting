@@ -209,6 +209,35 @@ namespace FriendSlop.Audio
             });
         }
 
+        // ---- UI sounds: short, soft and pitched so they never compete with gunfire.
+        static AudioClip _uiHover, _uiClick, _killConfirm, _fanfare;
+        public static AudioClip UiHover => _uiHover ??= Build("UiHover", 0.05f, (t, i, s) => Math.Sin(2 * Math.PI * 1400 * t) * Math.Exp(-t * 90) * 0.35);
+        public static AudioClip UiClick => _uiClick ??= Build("UiClick", 0.09f, (t, i, s) =>
+            (Math.Sin(2 * Math.PI * 880 * t) + 0.5 * Math.Sin(2 * Math.PI * 1320 * t)) * Math.Exp(-t * 55) * 0.45);
+        /// <summary>Kill confirm: a low thump under a quick rising two-note chime.</summary>
+        public static AudioClip KillConfirm => _killConfirm ??= Build("KillConfirm", 0.4f, (t, i, s) =>
+        {
+            double thump = Math.Sin(2 * Math.PI * (120 - 60 * t) * t) * Math.Exp(-t * 18) * 0.8;
+            double a = Math.Sin(2 * Math.PI * 988 * t) * Math.Exp(-t * 16);
+            double b = t > 0.07 ? Math.Sin(2 * Math.PI * 1480 * (t - 0.07)) * Math.Exp(-(t - 0.07) * 10) : 0;
+            return thump + (a + b) * 0.4;
+        });
+        /// <summary>Level-up fanfare: a bright four-note arpeggio.</summary>
+        public static AudioClip Fanfare => _fanfare ??= Build("Fanfare", 0.9f, (t, i, s) =>
+        {
+            double[] notes = { 523.25, 659.25, 783.99, 1046.5 };
+            double v = 0;
+            for (int n = 0; n < notes.Length; n++)
+            {
+                double st = n * 0.09;
+                if (t < st) continue;
+                double tt = t - st;
+                double env = Math.Min(1, tt / 0.01) * Math.Exp(-tt * (n == 3 ? 3.5 : 9));
+                v += (Math.Sin(2 * Math.PI * notes[n] * tt) + 0.3 * Math.Sin(4 * Math.PI * notes[n] * tt)) * env;
+            }
+            return v * 0.32;
+        });
+
         static AudioClip MakeHitTick() =>
             Build("HitTick", 0.07f, (t, i, s) => Math.Sin(2 * Math.PI * 2300 * t) * Math.Exp(-t * 70));
 

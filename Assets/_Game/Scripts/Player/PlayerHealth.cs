@@ -30,6 +30,7 @@ namespace FriendSlop.Player
 
         /// <summary>Local only: when the last hit landed (HUD red flash).</summary>
         public float LastHurtTime { get; private set; } = -10f;
+        public float LastHurtAmount { get; private set; }
         public float RespawnAt { get; private set; }
 
         NetworkPlayer _player;
@@ -95,6 +96,8 @@ namespace FriendSlop.Player
                 LastHurtTime = Time.time;
                 SfxPlayer.Play2D(Sfx.Thud, 0.8f, 0.7f);
                 _player.AddRecoil(Mathf.Clamp(amount * 0.4f, 2f, 12f));
+                NetworkPlayer.Shake(Mathf.Clamp(amount / 60f, 0.15f, 0.6f));
+                LastHurtAmount = amount;
             }
             else SfxPlayer.PlayAt(Sfx.Thud, position, 0.8f, 0.7f, 2f, 30f);
         }

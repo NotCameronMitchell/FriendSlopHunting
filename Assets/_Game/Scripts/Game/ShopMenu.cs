@@ -63,7 +63,7 @@ namespace FriendSlop.Game
             GUILayout.EndScrollView();
 
             GUILayout.Space(8);
-            if (GUILayout.Button("Close  (E / Esc)", GUILayout.Height(34))) Close();
+            if (FriendSlop.Game.UiTheme.Btn("Close  (E / Esc)", GUILayout.Height(34))) Close();
             GUILayout.EndArea();
         }
 

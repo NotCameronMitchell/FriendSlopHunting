@@ -261,6 +261,29 @@ namespace FriendSlop.EditorTools
                 Debug.Log($"[Bridge] near → {a[0]} #{nth} at {tp}");
                 return;
             }
+            if (cmd.StartsWith("shoot-zoo "))
+            {
+                // shoot-zoo deer 12 head : put a live zoo animal 12 m ahead and fire the equipped gun at its body (or head).
+                var a = cmd.Substring(10).Split(' ');
+                var pw = FriendSlop.Weapons.PlayerWeapons.Local;
+                Animal target = null;
+                foreach (var z in _zoo) if (z && !z.IsDead.Value && string.Equals(z.Species.displayName, a[0], System.StringComparison.OrdinalIgnoreCase)) { target = z; break; }
+                if (pw == null || target == null) { Debug.LogWarning($"[Bridge] shoot-zoo: no live {a[0]} (selftest-zoo first)"); return; }
+                float dist = a.Length > 1 ? float.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture) : 12f;
+                bool head = a.Length > 2 && a[2] == "head";
+                var me = pw.transform.position; var fwd = pw.transform.forward; fwd.y = 0f; fwd.Normalize();
+                var spot = me + fwd * dist; spot.y = FriendSlop.World.Ground.HeightAt(spot);
+                var agent = target.GetComponent<UnityEngine.AI.NavMeshAgent>();
+                if (agent != null && agent.enabled) agent.Warp(spot); else target.transform.position = spot;
+                Physics.SyncTransforms();
+                var sp = target.Species;
+                Vector3 aim = head
+                    ? target.transform.position + target.transform.forward * sp.bodyLength * 0.55f * sp.scale + Vector3.up * (sp.legLength + sp.bodyHeight) * sp.scale
+                    : target.transform.position + Vector3.up * (sp.legLength + sp.bodyHeight * 0.5f) * sp.scale;
+                pw.TestFireAt(aim);
+                Debug.Log($"[Bridge] shoot-zoo {sp.displayName} at {dist} m ({(head ? "head" : "body")}) with {pw.Current?.displayName}");
+                return;
+            }
             if (cmd.StartsWith("tp "))
             {
                 // tp x z yaw : stand on the ground at (x, z) facing yaw degrees.
@@ -879,6 +902,19 @@ namespace FriendSlop.EditorTools
                     var aim = deer.transform.position + Vector3.up * (deer.Species.legLength + deer.Species.bodyHeight * 0.5f) * deer.Species.scale;
                     pw.TestFireAt(aim);
                     Debug.Log($"[Bridge] shotgun fired at deer 18 m (equipped {pw.Current?.displayName})");
+                    break;
+                }
+                case "banner-test":
+                    FriendSlop.Game.GameHud.ShowBanner("LEVEL UP!", "Hunter level 11  ·  new upgrades at the gun shop", FriendSlop.Game.UiTheme.Gold);
+                    FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.Fanfare, 0.8f);
+                    Debug.Log("[Bridge] banner shown");
+                    break;
+                case "hurt-test":
+                {
+                    var hp = FriendSlop.Player.PlayerHealth.Local;
+                    if (hp == null || !hp.IsServer) { Debug.LogWarning("[Bridge] hurt-test: host first"); return; }
+                    hp.ServerDamage(30f, Vector3.zero, "test");
+                    Debug.Log($"[Bridge] hurt → {hp.Health.Value}");
                     break;
                 }
                 case "zoo-hp":

@@ -59,6 +59,7 @@ namespace FriendSlop.Weapons
         public static void PlayFx(Vector3 center, float radius)
         {
             SfxPlayer.PlayAt(Sfx.Explosion, center, 1f, 1f, minDistance: 8f, maxDistance: 300f);
+            FriendSlop.Player.NetworkPlayer.ShakeAt(center, 0.75f, Mathf.Max(18f, radius * 4f));
 
             var go = new GameObject("Explosion");
             go.transform.position = center;

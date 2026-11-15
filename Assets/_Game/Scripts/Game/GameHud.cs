@@ -17,6 +17,7 @@ namespace FriendSlop.Game
         {
             public string Text;
             public float Until;
+            public float Born;
         }
 
         readonly List<Toast> _toasts = new List<Toast>();
@@ -37,12 +38,66 @@ namespace FriendSlop.Game
         const float HitMarkerSeconds = 0.18f;
         const float PunchSeconds = 0.6f;
 
-        /// <summary>Flash an X on the crosshair. Red + bigger for headshots.</summary>
+        /// <summary>Flash the hit marker on the crosshair. Gold + bigger for headshots.</summary>
         public static void ShowHitMarker(bool headshot)
         {
             _hitMarkerUntil = Time.unscaledTime + HitMarkerSeconds;
+            _hitMarkerStart = Time.unscaledTime;
             _hitMarkerHead = headshot;
         }
+
+        // ------------------------------------------------------------------ juice state
+        // Research notes (GMTK "Secrets of Game Feel" and "The Power of Video Game HUDs", a Valheim
+        // combat-feel breakdown, Lexispell's UI tween tips): every hit gets layered feedback (marker,
+        // number, sound, flash); anything that changes on the HUD animates (pop, count up, slide);
+        // the most important info gets the "first read" (centre, big, bright); motion stays snappy.
+
+        static float _hitMarkerStart = -10f, _killStart = -10f;
+        static string _killName, _killTags = "";
+        static int _killValue;
+        struct PopupText { public Vector3 World; public string Text; public Color Color; public float Size, Born; public Vector2 Drift; }
+        static readonly List<PopupText> _popups = new List<PopupText>();
+        struct Banner { public string Title, Sub; public Color Color; public float Born; }
+        static readonly Queue<Banner> _banners = new Queue<Banner>();
+        static Banner? _banner;
+        float _shownMoney = -1f, _hpTrail = 1f, _hpTrailHold, _lastHp = -1f;
+        string _lastHint = "";
+        float _hintBorn;
+        int _lastEquipped = -1;
+        float _equipBorn = -10f;
+        static Texture2D _vignette;
+
+        /// <summary>Floating text at a world position (damage numbers), popping in, rising and fading.</summary>
+        public static void Popup(Vector3 world, string text, Color color, float size = 1f)
+        {
+            _popups.Add(new PopupText { World = world, Text = text, Color = color, Size = size, Born = Time.unscaledTime,
+                Drift = new Vector2(Random.Range(-28f, 28f), 0f) });
+            if (_popups.Count > 24) _popups.RemoveAt(0);
+        }
+
+        /// <summary>Local player's kill: big confirm under the crosshair with the style tags and value.</summary>
+        public static void ShowKill(string name, FriendSlop.Animals.ShotStyle style, int value, int bounty)
+        {
+            _killStart = Time.unscaledTime;
+            _killName = $"{name.ToUpperInvariant()} DOWN";
+            var tags = new List<string>();
+            if ((style & FriendSlop.Animals.ShotStyle.Headshot) != 0) tags.Add("HEADSHOT");
+            if ((style & FriendSlop.Animals.ShotStyle.LongShot) != 0) tags.Add("LONG SHOT");
+            if ((style & FriendSlop.Animals.ShotStyle.JumpShot) != 0) tags.Add("JUMP SHOT");
+            _killTags = string.Join("  ·  ", tags);
+            _killValue = bounty > 0 ? bounty : value;
+            _hitMarkerStart = Time.unscaledTime; _hitMarkerUntil = Time.unscaledTime + 0.4f; _hitMarkerHead = true;
+            FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.KillConfirm, 0.8f, tags.Count > 0 ? 1.12f : 1f);
+        }
+
+        /// <summary>A big centre banner (level up, achievements). Queued so they never overlap.</summary>
+        public static void ShowBanner(string title, string sub, Color color)
+        {
+            _banners.Enqueue(new Banner { Title = title, Sub = sub, Color = color });
+        }
+
+        static float EaseOutBack(float x) { const float c1 = 1.70158f, c3 = c1 + 1f; x = Mathf.Clamp01(x); return 1f + c3 * Mathf.Pow(x - 1f, 3f) + c1 * Mathf.Pow(x - 1f, 2f); }
+        static float EaseOutCubic(float x) { x = Mathf.Clamp01(x); return 1f - Mathf.Pow(1f - x, 3f); }
 
         void Update()
         {
@@ -80,7 +135,8 @@ namespace FriendSlop.Game
         void OnLevelUp(int level)
         {
             OnAnnounced($"LEVEL UP! Hunter level {level}. Check the gun shop for new upgrades.");
-            FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.HeadshotDing, 0.9f, 1.2f);
+            ShowBanner("LEVEL UP!", $"Hunter level {level}  ·  new upgrades at the gun shop", UiTheme.Gold);
+            FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.Fanfare, 0.8f);
         }
 
         void OnAchievement(string id, string name)
@@ -88,7 +144,8 @@ namespace FriendSlop.Game
             var a = FriendSlop.Profile.Cosmetics.FindAchievement(id);
             var reward = a != null && !string.IsNullOrEmpty(a.RewardId) ? FriendSlop.Profile.Cosmetics.Find(a.RewardId) : null;
             OnAnnounced(reward != null ? $"ACHIEVEMENT: {name}! Unlocked {reward.Name}" : $"ACHIEVEMENT: {name}!");
-            FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.HeadshotDing, 0.8f, 0.8f);
+            ShowBanner("ACHIEVEMENT", reward != null ? $"{name}  ·  unlocked {reward.Name}" : name, new Color(0.55f, 0.9f, 1f));
+            FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.Fanfare, 0.6f, 1.25f);
         }
         void OnDisable()
         {
@@ -99,7 +156,7 @@ namespace FriendSlop.Game
 
         void OnAnnounced(string text)
         {
-            _toasts.Add(new Toast { Text = text, Until = Time.unscaledTime + ToastSeconds });
+            _toasts.Add(new Toast { Text = text, Until = Time.unscaledTime + ToastSeconds, Born = Time.unscaledTime });
             if (_toasts.Count > MaxToasts) _toasts.RemoveAt(0);
         }
 
@@ -126,7 +183,11 @@ namespace FriendSlop.Game
             _money.fontSize = Mathf.RoundToInt(30 * scale);
             var prevColor = GUI.color;
             if (punching) GUI.color = Color.Lerp(new Color(0.5f, 1f, 0.5f), Color.white, p);
-            UiTheme.Shadow(new Rect(tr.x, tr.y + 4, tr.width - 16, 38), $"${state.Money.Value:N0}", _money);
+            int money = state.Money.Value;
+            if (_shownMoney < 0f) _shownMoney = money;
+            float diff = money - _shownMoney;
+            _shownMoney = Mathf.Abs(diff) < 1f ? money : Mathf.MoveTowards(_shownMoney, money, Mathf.Max(60f, Mathf.Abs(diff) * 5f) * Time.unscaledDeltaTime);
+            UiTheme.Shadow(new Rect(tr.x, tr.y + 4, tr.width - 16, 38), $"${Mathf.RoundToInt(_shownMoney):N0}", _money);
             GUI.color = prevColor;
             GUI.Label(new Rect(tr.x + 14, tr.y + 10, 80, 22), "TEAM", UiTheme.Small);
             var right = new GUIStyle(UiTheme.Small) { alignment = TextAnchor.MiddleRight };
@@ -156,15 +217,10 @@ namespace FriendSlop.Game
             DrawSleep();
             DrawTank();
 
-            // Hit marker over the crosshair.
-            if (Time.unscaledTime < _hitMarkerUntil)
-            {
-                var c = new Vector2(Screen.width / 2f, Screen.height / 2f);
-                GUI.color = _hitMarkerHead ? new Color(1f, 0.25f, 0.2f) : Color.white;
-                _marker.fontSize = _hitMarkerHead ? 34 : 24;
-                GUI.Label(new Rect(c.x - 30, c.y - 30, 60, 60), "X", _marker);
-                GUI.color = prevColor;
-            }
+            DrawPopups();
+            DrawCrosshair();
+            DrawKill();
+            DrawBanner();
 
             // Announcement feed: pills under the boss bar, newest at the bottom, fading out.
             float now = Time.unscaledTime;
@@ -173,8 +229,11 @@ namespace FriendSlop.Game
             for (int i = 0; i < _toasts.Count; i++)
             {
                 float alpha = Mathf.Clamp01((_toasts[i].Until - now) / 1f);
+                float tin = (now - _toasts[i].Born) / 0.28f;
+                alpha *= Mathf.Clamp01(tin * 2f);
+                float pop = Mathf.LerpUnclamped(0.85f, 1f, EaseOutBack(tin));
                 float tw = Mathf.Min(Screen.width - 560f, _toast.CalcSize(new GUIContent(_toasts[i].Text)).x + 36f);
-                var r = new Rect(Screen.width / 2f - tw / 2f, ty + i * 32, tw, 28);
+                var r = new Rect(Screen.width / 2f - tw * pop / 2f, ty + i * 32 - (1f - EaseOutCubic(tin)) * 18f, tw * pop, 28);
                 var prev = GUI.color;
                 GUI.color = new Color(1f, 1f, 1f, alpha);
                 UiTheme.Pill(r);
@@ -182,13 +241,18 @@ namespace FriendSlop.Game
                 GUI.color = prev;
             }
 
-            string hint = NetworkPlayer.LocalHint;
-            if (!string.IsNullOrEmpty(hint))
+            string hint = NetworkPlayer.LocalHint ?? "";
+            if (hint != _lastHint) { if (_lastHint.Length == 0) _hintBorn = now; _lastHint = hint; }
+            if (hint.Length > 0)
             {
+                float k = EaseOutBack((now - _hintBorn) / 0.2f);
                 float hw = _hint.CalcSize(new GUIContent(hint)).x + 40f;
-                var r = new Rect(Screen.width / 2f - hw / 2f, Screen.height - 132, hw, 32);
+                var r = new Rect(Screen.width / 2f - hw / 2f, Screen.height - 132 + (1f - k) * 10f, hw, 32);
+                var prev = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01((now - _hintBorn) / 0.12f));
                 UiTheme.Pill(r);
                 UiTheme.Shadow(r, hint, _hint);
+                GUI.color = prev;
             }
         }
 
@@ -307,12 +371,16 @@ namespace FriendSlop.Game
             var hp = FriendSlop.Player.PlayerHealth.Local;
             if (hp != null && hp.IsSpawned)
             {
-                // Red flash when hit.
-                float flash = Mathf.Clamp01(1f - (Time.time - hp.LastHurtTime) / 0.5f);
-                if (flash > 0f)
+                // Red vignette when hit (edges only, so you can still see what bit you), pulsing at low health.
+                float flash = Mathf.Clamp01(1f - (Time.time - hp.LastHurtTime) / 0.6f) * Mathf.Lerp(0.6f, 1f, Mathf.InverseLerp(5f, 40f, hp.LastHurtAmount));
+                float hpNow = hp.Health.Value / hp.MaxHp;
+                float lowHp = hpNow < 0.3f && !hp.IsDown.Value ? (0.35f + 0.2f * Mathf.Sin(Time.time * 4f)) * (1f - hpNow / 0.3f) : 0f;
+                float vig = Mathf.Max(flash * 0.9f, lowHp);
+                if (vig > 0.01f && Event.current.type == EventType.Repaint)
                 {
-                    GUI.color = new Color(0.8f, 0f, 0f, 0.35f * flash);
-                    GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _white);
+                    GUI.color = new Color(0.8f, 0f, 0f, Mathf.Clamp01(vig * 1.5f));
+                    GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), Vignette, ScaleMode.StretchToFill);
+                    GUI.color = prev;
                 }
 
                 // Status panel (bottom left): level badge + XP, then the health bar.
@@ -322,7 +390,13 @@ namespace FriendSlop.Game
                 var bar = new Rect(panel.x + 12, panel.y + 52, panel.width - 24, 26);
                 var hpCol = Color.Lerp(UiTheme.Bad, UiTheme.Good, Mathf.InverseLerp(0.2f, 0.8f, frac));
                 if (frac < 0.25f) hpCol = Color.Lerp(hpCol, Color.white, 0.25f * (0.5f + 0.5f * Mathf.Sin(Time.time * 10f))); // low-health pulse
-                UiTheme.Bar(bar, frac, hpCol, $"♥  {Mathf.CeilToInt(hp.Health.Value)} / {Mathf.CeilToInt(hp.MaxHp)}");
+                if (_lastHp < 0f || frac > _hpTrail) _hpTrail = frac;
+                if (_lastHp >= 0f && frac < _lastHp - 0.0001f) _hpTrailHold = Time.unscaledTime + 0.45f;
+                _lastHp = frac;
+                if (Time.unscaledTime > _hpTrailHold) _hpTrail = Mathf.MoveTowards(_hpTrail, frac, Time.unscaledDeltaTime * 0.7f);
+                float shakeHp = Mathf.Clamp01(1f - (Time.time - hp.LastHurtTime) / 0.3f);
+                bar.x += Mathf.Sin(Time.time * 70f) * 3f * shakeHp;
+                UiTheme.Bar(bar, frac, hpCol, $"♥  {Mathf.CeilToInt(hp.Health.Value)} / {Mathf.CeilToInt(hp.MaxHp)}", null, _hpTrail);
 
                 var prof = FriendSlop.Profile.PlayerProfile.Current;
                 int lv = prof.Level;
@@ -395,6 +469,22 @@ namespace FriendSlop.Game
             var catalog = weapons.Catalog;
             var slots = weapons.Slots();
             var prev = GUI.color;
+            if (weapons.Equipped.Value != _lastEquipped)
+            {
+                if (_lastEquipped >= 0) _equipBorn = Time.unscaledTime;
+                _lastEquipped = weapons.Equipped.Value;
+            }
+            // Big weapon name at the bottom centre right after switching (fades quickly).
+            float since = Time.unscaledTime - _equipBorn;
+            if (since < 1.1f && weapons.Current != null)
+            {
+                _equipName ??= new GUIStyle(UiTheme.HudBig) { fontSize = 22, alignment = TextAnchor.MiddleCenter };
+                _equipName.normal.textColor = UiTheme.Gold;
+                GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01((1.1f - since) / 0.35f));
+                float k = EaseOutBack(since / 0.22f);
+                UiTheme.Shadow(new Rect(0, Screen.height - 200 + (1f - k) * 14f, Screen.width, 34), weapons.Current.displayName.ToUpperInvariant(), _equipName);
+                GUI.color = prev;
+            }
 
             // Weapons panel (bottom right): a row per slot with its key; the equipped one is highlighted.
             const float rowH = 26f, pw = 250f;
@@ -408,19 +498,190 @@ namespace FriendSlop.Game
                 var def = catalog.Get(i);
                 bool on = weapons.Equipped.Value == i;
                 var row = new Rect(panel.x + 8, y, pw - 16, rowH - 2);
-                if (on) { GUI.color = new Color(1f, 0.64f, 0.22f, 0.9f); UiTheme.Pill(row); GUI.color = prev; }
-                UiTheme.KeyCap(row.x + 6, row.y + 2, FriendSlop.Weapons.WeaponCatalog.KeyLabel(s));
+                if (on)
+                {
+                    float k = EaseOutBack((Time.unscaledTime - _equipBorn) / 0.25f);
+                    var hl = new Rect(row.x - (1f - k) * 12f, row.y, row.width + (1f - k) * 24f, row.height);
+                    GUI.color = new Color(1f, 0.64f, 0.22f, 0.9f); UiTheme.Pill(hl); GUI.color = prev;
+                }
+                float keyW = UiTheme.KeyCap(row.x + 6, row.y + 2, FriendSlop.Weapons.WeaponCatalog.KeyLabel(s));
                 string label = def.displayName;
                 if (on && def.spinUpTime > 0f && weapons.SpinUp < 1f) label += $"  (spinning {weapons.SpinUp:P0})";
                 _weapon.normal.textColor = on ? UiTheme.Gold : UiTheme.Text;
                 _weapon.fontStyle = on ? FontStyle.Bold : FontStyle.Normal;
-                UiTheme.Shadow(new Rect(row.x + 34, row.y, row.width - 34, row.height), label, _weapon);
+                float lx = Mathf.Max(34f, keyW + 14f);
+                UiTheme.Shadow(new Rect(row.x + lx, row.y, row.width - lx, row.height), label, _weapon);
                 y += rowH;
             }
             var help = new GUIStyle(UiTheme.Small) { fontSize = 11, alignment = TextAnchor.MiddleCenter };
             help.normal.textColor = UiTheme.Muted;
             GUI.Label(new Rect(panel.x, panel.yMax - 26, pw, 20),
                 $"{FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.Inventory)} inventory  ·  {FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.DropWeapon)} drop  ·  {FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.Map)} map", help);
+            GUI.color = prev;
+        }
+
+        // ------------------------------------------------------------------ juice drawing
+
+        GUIStyle _equipName;
+
+        static Texture2D Vignette
+        {
+            get
+            {
+                if (_vignette != null) return _vignette;
+                const int n = 128;
+                _vignette = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
+                for (int y = 0; y < n; y++)
+                    for (int x = 0; x < n; x++)
+                    {
+                        float dx = (x + 0.5f) / n * 2f - 1f, dy = (y + 0.5f) / n * 2f - 1f;
+                        float d = Mathf.Sqrt(dx * dx * 0.8f + dy * dy);
+                        float a = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.3f, 1.0f, d));
+                        _vignette.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+                    }
+                _vignette.Apply();
+                return _vignette;
+            }
+        }
+
+        static void Line(Vector2 center, float angleDeg, float from, float to, float thickness, Color color)
+        {
+            var m = GUI.matrix;
+            GUIUtility.RotateAroundPivot(angleDeg, center);
+            var prev = GUI.color;
+            GUI.color = new Color(0f, 0f, 0f, color.a * 0.55f);
+            GUI.DrawTexture(new Rect(center.x + from - 1f, center.y - thickness / 2f - 1f, to - from + 2f, thickness + 2f), Texture2D.whiteTexture);
+            GUI.color = color;
+            GUI.DrawTexture(new Rect(center.x + from, center.y - thickness / 2f, to - from, thickness), Texture2D.whiteTexture);
+            GUI.color = prev;
+            GUI.matrix = m;
+        }
+
+        /// <summary>
+        /// Crosshair: four ticks whose gap opens with weapon spread, movement and recent shots, and
+        /// tightens when aiming. Hit markers are four diagonal strokes that punch out and fade (gold
+        /// for headshots, red and bigger on a kill).
+        /// </summary>
+        void DrawCrosshair()
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            var me = NetworkPlayer.Local;
+            if (me == null || me.InTank || me.IsDown || me.Sleeping.Value || GameMenus.AnyOpen || Cursor.lockState != CursorLockMode.Locked) return;
+            var c = new Vector2(Mathf.Round(Screen.width / 2f), Mathf.Round(Screen.height / 2f));
+            var w = FriendSlop.Weapons.PlayerWeapons.Local;
+            float spread = w != null ? w.CrosshairSpread : 0f;
+            bool aiming = w != null && w.Aiming;
+            float scale = Mathf.Max(0.75f, Screen.height / 1080f);
+            float gap = (aiming ? 3f : 6f + spread * 26f) * scale;
+            float len = (aiming ? 5f : 8f) * scale;
+            float th = Mathf.Max(2f, 2f * scale);
+            var col = new Color(1f, 1f, 1f, string.IsNullOrEmpty(NetworkPlayer.LocalHint) ? 0.9f : 0.55f);
+            for (int i = 0; i < 4; i++) Line(c, i * 90f, gap, gap + len, th, col);
+            GUI.color = col; GUI.DrawTexture(new Rect(c.x - th / 2f, c.y - th / 2f, th, th), Texture2D.whiteTexture); GUI.color = Color.white;
+
+            float t = Time.unscaledTime - _hitMarkerStart;
+            float life = _hitMarkerUntil - _hitMarkerStart + 0.12f;
+            if (t >= 0f && t < life)
+            {
+                bool kill = Time.unscaledTime - _killStart < 0.5f;
+                float k = t / life;
+                float pop = EaseOutBack(t / 0.08f);
+                float baseGap = (kill ? 10f : 7f) * scale + pop * 4f * scale;
+                float mlen = (kill ? 14f : _hitMarkerHead ? 11f : 8f) * scale;
+                var mc = kill ? new Color(1f, 0.25f, 0.2f) : _hitMarkerHead ? new Color(1f, 0.84f, 0.25f) : Color.white;
+                mc.a = 1f - k * k;
+                for (int i = 0; i < 4; i++) Line(c, 45f + i * 90f, baseGap, baseGap + mlen, th * (kill ? 1.6f : 1.2f), mc);
+            }
+        }
+
+        GUIStyle _popupStyle, _killStyle, _killSub, _bannerTitle, _bannerSub;
+
+        void DrawPopups()
+        {
+            if (_popups.Count == 0) return;
+            float now = Time.unscaledTime;
+            _popups.RemoveAll(p => now - p.Born > 0.95f);
+            var cam = FriendSlop.Weapons.PlayerWeapons.Local != null && FriendSlop.Weapons.PlayerWeapons.Local.ViewCamera != null && FriendSlop.Weapons.PlayerWeapons.Local.ViewCamera.isActiveAndEnabled
+                ? FriendSlop.Weapons.PlayerWeapons.Local.ViewCamera : Camera.main;
+            if (cam == null) return;
+            _popupStyle ??= new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
+            var prev = GUI.color;
+            foreach (var p in _popups)
+            {
+                var sp = cam.WorldToScreenPoint(p.World);
+                if (sp.z <= 0f) continue;
+                float t = (now - p.Born) / 0.95f;
+                float pop = EaseOutBack(t / 0.18f);
+                float size = Mathf.LerpUnclamped(0.6f, 1f, pop) * p.Size * (1f + Mathf.Max(0f, 0.25f - t) * 1.2f);
+                _popupStyle.fontSize = Mathf.RoundToInt(26f * size * Mathf.Max(0.8f, Screen.height / 1080f));
+                float x = sp.x + p.Drift.x * EaseOutCubic(t), y = Screen.height - sp.y - 40f * EaseOutCubic(t) - 10f;
+                var r = new Rect(x - 100f, y - 20f, 200f, 40f);
+                GUI.color = new Color(0f, 0f, 0f, 0.7f * (1f - t));
+                GUI.Label(new Rect(r.x + 2, r.y + 2, r.width, r.height), p.Text, _popupStyle);
+                GUI.color = new Color(p.Color.r, p.Color.g, p.Color.b, 1f - Mathf.Pow(t, 3f));
+                GUI.Label(r, p.Text, _popupStyle);
+            }
+            GUI.color = prev;
+        }
+
+        void DrawKill()
+        {
+            float t = Time.unscaledTime - _killStart;
+            if (t < 0f || t > 1.8f || string.IsNullOrEmpty(_killName)) return;
+            _killStyle ??= new GUIStyle(UiTheme.HudBig) { fontSize = 26, alignment = TextAnchor.MiddleCenter };
+            _killSub ??= new GUIStyle(UiTheme.HudLabel) { fontSize = 15, alignment = TextAnchor.MiddleCenter };
+            float k = EaseOutBack(t / 0.25f);
+            float a = t > 1.3f ? 1f - (t - 1.3f) / 0.5f : 1f;
+            var prev = GUI.color;
+            float y = Screen.height / 2f + 46f;
+            var m = GUI.matrix;
+            GUIUtility.ScaleAroundPivot(Vector2.one * Mathf.LerpUnclamped(1.6f, 1f, k), new Vector2(Screen.width / 2f, y + 16f));
+            GUI.color = new Color(1f, 1f, 1f, a);
+            _killStyle.normal.textColor = new Color(1f, 0.42f, 0.32f);
+            UiTheme.Shadow(new Rect(0, y, Screen.width, 32), _killName, _killStyle);
+            GUI.matrix = m;
+            string sub = (_killTags.Length > 0 ? _killTags + "   " : "") + (_killValue > 0 ? $"~${_killValue:N0}" : "");
+            if (sub.Length > 0)
+            {
+                _killSub.normal.textColor = UiTheme.Gold;
+                float k2 = EaseOutCubic((t - 0.12f) / 0.25f);
+                GUI.color = new Color(1f, 1f, 1f, a * k2);
+                UiTheme.Shadow(new Rect(0, y + 32 + (1f - k2) * 8f, Screen.width, 22), sub, _killSub);
+            }
+            GUI.color = prev;
+        }
+
+        void DrawBanner()
+        {
+            float now = Time.unscaledTime;
+            if (_banner == null && _banners.Count > 0) { var b = _banners.Dequeue(); b.Born = now; _banner = b; }
+            if (_banner == null) return;
+            var bn = _banner.Value;
+            float t = now - bn.Born;
+            const float life = 2.6f;
+            if (t > life) { _banner = null; return; }
+            _bannerTitle ??= new GUIStyle(UiTheme.HudBig) { fontSize = 44, alignment = TextAnchor.MiddleCenter };
+            _bannerSub ??= new GUIStyle(UiTheme.HudLabel) { fontSize = 17, alignment = TextAnchor.MiddleCenter };
+            float k = EaseOutBack(t / 0.35f);
+            float a = t > life - 0.5f ? (life - t) / 0.5f : Mathf.Clamp01(t / 0.1f);
+            float y = Screen.height * 0.24f;
+            var prev = GUI.color;
+            // Ribbon behind the text: grows out from the centre.
+            float rw = Mathf.Min(Screen.width - 40f, 720f) * EaseOutCubic(t / 0.3f);
+            GUI.color = new Color(0f, 0f, 0f, 0.45f * a);
+            GUI.DrawTexture(new Rect(Screen.width / 2f - rw / 2f, y - 8f, rw, 90f), Texture2D.whiteTexture);
+            GUI.color = new Color(bn.Color.r, bn.Color.g, bn.Color.b, a);
+            GUI.DrawTexture(new Rect(Screen.width / 2f - rw / 2f, y - 8f, rw, 3f), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(Screen.width / 2f - rw / 2f, y + 79f, rw, 3f), Texture2D.whiteTexture);
+            var m = GUI.matrix;
+            GUIUtility.ScaleAroundPivot(Vector2.one * Mathf.LerpUnclamped(0.4f, 1f, k), new Vector2(Screen.width / 2f, y + 24f));
+            _bannerTitle.normal.textColor = bn.Color;
+            GUI.color = new Color(1f, 1f, 1f, a);
+            UiTheme.Shadow(new Rect(0, y, Screen.width, 50), bn.Title, _bannerTitle);
+            GUI.matrix = m;
+            float k2 = EaseOutCubic((t - 0.15f) / 0.3f);
+            GUI.color = new Color(1f, 1f, 1f, a * k2);
+            UiTheme.Shadow(new Rect(0, y + 50 + (1f - k2) * 8f, Screen.width, 24), bn.Sub, _bannerSub);
             GUI.color = prev;
         }
 

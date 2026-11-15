@@ -230,6 +230,7 @@ namespace FriendSlop.World
                 onExplode: point => ShellExplodeRpc(point), onFinished: null);
             SfxPlayer.Play2D(Sfx.RocketLaunch, 1f, 0.55f);
             SfxPlayer.Play2D(Sfx.Explosion, 0.35f, 1.6f);
+            FriendSlop.Player.NetworkPlayer.Shake(0.35f);
             if (_rb) _rb.AddForce(-dir * 6f, ForceMode.VelocityChange); // recoil kick (if we simulate)
             FireFxRpc(origin, dir);
         }

@@ -51,6 +51,13 @@ namespace FriendSlop.Weapons
         Transform _model;
         Transform _muzzle;
         Vector3 _holderRest;
+        Quaternion _holderRestRot = Quaternion.identity;
+        Vector3 _kickEuler, _kickEulerVel; // viewmodel recoil rotation (spring)
+        Vector2 _sway;
+        float _bloom;                      // crosshair spread from recent shots, 0..1
+        /// <summary>How open the crosshair should be (0 tight .. 1 wide), from weapon spread, movement and recent shots.</summary>
+        public float CrosshairSpread { get; private set; }
+        public bool Aiming { get; private set; }
         float _nextFire;
         float _spin;
         bool _boomerangOut;
@@ -61,13 +68,15 @@ namespace FriendSlop.Weapons
         public WeaponCatalog Catalog => catalog;
         public WeaponDefinition Current => catalog != null ? catalog.Get(Equipped.Value) : null;
         public float SpinUp => _spin;
+        /// <summary>The first-person camera (for screen-space HUD effects such as damage numbers).</summary>
+        public Camera ViewCamera => playerCamera;
 
         void Awake()
         {
             _player = GetComponent<NetworkPlayer>();
             _health = GetComponent<FriendSlop.Player.PlayerHealth>();
             _upgrades = GetComponent<FriendSlop.Player.PlayerUpgrades>();
-            if (gunHolder) _holderRest = gunHolder.localPosition;
+            if (gunHolder) { _holderRest = gunHolder.localPosition; _holderRestRot = gunHolder.localRotation; }
         }
 
         public override void OnNetworkSpawn()
@@ -125,10 +134,10 @@ namespace FriendSlop.Weapons
             bool canShoot = controlling && !_player.IsCarrying && !_player.InTankControl; // driver/gunner use the cannon
             bool aiming = canShoot && Controls.Held(GameAction.Aim);
 
+            Aiming = aiming;
             if (playerCamera)
-                playerCamera.fieldOfView = Mathf.Lerp(playerCamera.fieldOfView, aiming ? def.aimFov * GameSettings.FieldOfView / 75f : GameSettings.FieldOfView, Time.deltaTime * 12f);
-            if (gunHolder)
-                gunHolder.localPosition = Vector3.Lerp(gunHolder.localPosition, _holderRest, Time.deltaTime * 12f);
+                playerCamera.fieldOfView = Mathf.Lerp(playerCamera.fieldOfView, aiming ? def.aimFov * GameSettings.FieldOfView / 75f : GameSettings.FieldOfView + _player.FovBonus, Time.deltaTime * 12f);
+            AnimateViewmodel(def, aiming, controlling ? mouse.delta.ReadValue() : Vector2.zero);
 
             // Minigun-style spin-up.
             bool trigger = canShoot && (def.IsAuto ? Controls.Held(GameAction.Fire) : Controls.Pressed(GameAction.Fire));
@@ -331,9 +340,41 @@ namespace FriendSlop.Weapons
             PlayShotSound(def, muzzlePos, positional: false);
             if (UsesMuzzleFlash(def)) MuzzleFlash(muzzlePos);
             _player.AddRecoil(def.recoil * (aiming ? 0.6f : 1f));
-            if (gunHolder) gunHolder.localPosition = _holderRest + new Vector3(0f, 0.015f, -0.08f);
+            if (gunHolder) gunHolder.localPosition = _holderRest + new Vector3(0f, 0.015f, -0.08f - def.recoil * 0.006f);
+            // Viewmodel kick: muzzle flips up, with a random twist so no two shots look the same.
+            float kick = Mathf.Clamp(def.recoil, 0.5f, 10f) * (aiming ? 0.55f : 1f);
+            _kickEulerVel += new Vector3(-kick * 42f, Random.Range(-1f, 1f) * kick * 14f, Random.Range(-1f, 1f) * kick * 22f);
+            _bloom = Mathf.Min(1f, _bloom + 0.18f + def.recoil * 0.05f);
+            FriendSlop.Player.NetworkPlayer.Shake(Mathf.Clamp(def.recoil * 0.035f, 0.04f, 0.3f) * (aiming ? 0.6f : 1f));
 
             FireRpc(index, origin, dir, seed, aiming);
+        }
+
+        /// <summary>
+        /// The held gun's life: springs back from recoil, lags behind the mouse (sway), bobs with your
+        /// steps, and dips slightly while sprinting. Also works out how open the crosshair should be.
+        /// </summary>
+        void AnimateViewmodel(WeaponDefinition def, bool aiming, Vector2 mouseDelta)
+        {
+            float dt = Time.deltaTime;
+            // Spring the recoil rotation back to rest.
+            _kickEulerVel += (-_kickEuler * 260f - _kickEulerVel * 24f) * dt;
+            _kickEuler += _kickEulerVel * dt;
+            bool bob = GameSettings.HeadBob;
+            Vector2 targetSway = bob ? Vector2.ClampMagnitude(mouseDelta * 0.06f, 3f) : Vector2.zero;
+            _sway = Vector2.Lerp(_sway, targetSway, dt * 10f);
+            float walk = _player.BobBlend * (aiming ? 0.25f : 1f) * (bob ? 1f : 0.3f);
+            float ph = _player.BobPhase;
+            Vector3 bobPos = new Vector3(Mathf.Sin(ph) * 0.012f, -Mathf.Abs(Mathf.Cos(ph)) * 0.014f, 0f) * walk;
+            if (gunHolder)
+            {
+                gunHolder.localPosition = Vector3.Lerp(gunHolder.localPosition, _holderRest + bobPos, dt * 12f);
+                gunHolder.localRotation = _holderRestRot * Quaternion.Euler(_kickEuler.x + _sway.y, _kickEuler.y - _sway.x, _kickEuler.z - _sway.x * 1.5f);
+            }
+            _bloom = Mathf.MoveTowards(_bloom, 0f, dt * 2.2f);
+            float baseSpread = Mathf.InverseLerp(0f, 6f, aiming ? def.aimSpread : def.spread);
+            float target = Mathf.Clamp01(baseSpread * 0.7f + _bloom * 0.6f + _player.BobBlend * (aiming ? 0.05f : 0.25f) + (_player.IsGrounded ? 0f : 0.35f));
+            CrosshairSpread = Mathf.Lerp(CrosshairSpread, target, dt * 14f);
         }
 
         /// <summary>Dev self-test: fire the equipped weapon straight ahead, ignoring input and cooldowns.</summary>
@@ -367,6 +408,7 @@ namespace FriendSlop.Weapons
 
         void ReportHit(int index, Animal animal, Vector3 origin, Vector3 point, bool head, bool airborne)
         {
+            animal.NoteLocalHit(point, head);
             GameHud.ShowHitMarker(head);
             SfxPlayer.Play2D(head ? Sfx.HeadshotDing : Sfx.HitTick, head ? 0.7f : 0.5f);
             HitRpc(index, animal.NetworkObject, origin, point, head, airborne);

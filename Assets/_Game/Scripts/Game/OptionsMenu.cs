@@ -65,11 +65,11 @@ namespace FriendSlop.Game
             GUILayout.Label("Paused", _title);
             GUILayout.Label("The hunt keeps going for everyone else.", _small);
             GUILayout.Space(14);
-            if (GUILayout.Button("Resume", GUILayout.Height(40))) GameMenus.Close();
+            if (FriendSlop.Game.UiTheme.Btn("Resume", GUILayout.Height(40))) GameMenus.Close();
             GUILayout.Space(6);
-            if (GUILayout.Button("Options", GUILayout.Height(40))) GameMenus.Show(GameMenus.Menu.Options);
+            if (FriendSlop.Game.UiTheme.Btn("Options", GUILayout.Height(40))) GameMenus.Show(GameMenus.Menu.Options);
             GUILayout.Space(6);
-            if (GUILayout.Button("Leave hunt", GUILayout.Height(40)))
+            if (FriendSlop.Game.UiTheme.Btn("Leave hunt", GUILayout.Height(40)))
             {
                 GameMenus.Reset();
                 NetBootstrap.Instance?.Leave();
@@ -77,7 +77,7 @@ namespace FriendSlop.Game
                 Cursor.visible = true;
             }
             GUILayout.Space(6);
-            if (GUILayout.Button("Quit to desktop", GUILayout.Height(34)))
+            if (FriendSlop.Game.UiTheme.Btn("Quit to desktop", GUILayout.Height(34)))
             {
                 NetBootstrap.Instance?.Leave();
                 Application.Quit();
@@ -114,7 +114,7 @@ namespace FriendSlop.Game
 
             GUILayout.Space(8);
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Back", GUILayout.Height(34), GUILayout.Width(140)))
+            if (FriendSlop.Game.UiTheme.Btn("Back", GUILayout.Height(34), GUILayout.Width(140)))
             {
                 _capturing = null;
                 if (OpenFromMainMenu) OpenFromMainMenu = false;
@@ -130,7 +130,7 @@ namespace FriendSlop.Game
         {
             bool on = _tab == tab;
             GUI.color = on ? new Color(1f, 0.85f, 0.4f) : Color.white;
-            if (GUILayout.Button(label, GUILayout.Height(32))) { _tab = tab; _capturing = null; _scroll = Vector2.zero; }
+            if (FriendSlop.Game.UiTheme.Btn(label, GUILayout.Height(32))) { _tab = tab; _capturing = null; _scroll = Vector2.zero; }
             GUI.color = Color.white;
         }
 
@@ -146,7 +146,7 @@ namespace FriendSlop.Game
                 GUILayout.Label(Controls.DisplayNames[action], _label, GUILayout.Width(260));
                 bool waiting = _capturing == action;
                 GUI.color = waiting ? new Color(1f, 0.8f, 0.3f) : Color.white;
-                if (GUILayout.Button(waiting ? "Press a key…" : Controls.Label(action), _keyButton, GUILayout.Width(200), GUILayout.Height(28)))
+                if (FriendSlop.Game.UiTheme.Btn(waiting ? "Press a key…" : Controls.Label(action), _keyButton, GUILayout.Width(200), GUILayout.Height(28)))
                 {
                     _capturing = action;
                     _captureFrame = Time.frameCount;
@@ -160,7 +160,7 @@ namespace FriendSlop.Game
             GUILayout.Label("1 – 0, mouse wheel to cycle (fixed)", _small);
             GUILayout.EndHorizontal();
             GUILayout.Space(10);
-            if (GUILayout.Button("Reset controls to defaults", GUILayout.Width(260), GUILayout.Height(30))) Controls.ResetToDefaults();
+            if (FriendSlop.Game.UiTheme.Btn("Reset controls to defaults", GUILayout.Width(260), GUILayout.Height(30))) Controls.ResetToDefaults();
         }
 
         void DrawAudio()
@@ -169,7 +169,7 @@ namespace FriendSlop.Game
             GameSettings.SfxVolume = Slider("Effects volume", GameSettings.SfxVolume, 0f, 1f, v => $"{v:P0}");
             GameSettings.VoiceVolume = Slider("Voice chat volume", GameSettings.VoiceVolume, 0f, 1f, v => $"{v:P0}");
             GUILayout.Space(10);
-            if (GUILayout.Button("Reset all settings to defaults", GUILayout.Width(260), GUILayout.Height(30))) GameSettings.ResetToDefaults();
+            if (FriendSlop.Game.UiTheme.Btn("Reset all settings to defaults", GUILayout.Width(260), GUILayout.Height(30))) GameSettings.ResetToDefaults();
         }
 
         void DrawMouseView()
@@ -177,6 +177,8 @@ namespace FriendSlop.Game
             GameSettings.MouseSensitivity = Slider("Mouse sensitivity", GameSettings.MouseSensitivity, 0.02f, 0.6f, v => $"{v:0.00}");
             GameSettings.InvertY = Toggle("Invert mouse Y", GameSettings.InvertY);
             GameSettings.FieldOfView = Slider("Field of view", GameSettings.FieldOfView, 60f, 100f, v => $"{v:0}°");
+            GameSettings.ScreenShake = Slider("Screen shake", GameSettings.ScreenShake, 0f, 1f, v => v <= 0.001f ? "Off" : $"{v:P0}");
+            GameSettings.HeadBob = Toggle("Head bob and camera sway", GameSettings.HeadBob);
         }
 
         void DrawVoice()

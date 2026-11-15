@@ -130,7 +130,7 @@ namespace FriendSlop.Game
         public static void Pill(Rect r) { if (_skin == null) Build(); if (Event.current.type == EventType.Repaint) Nine(r, _pill, 15); }
 
         /// <summary>A rounded bar with a track, fill and an optional label inside.</summary>
-        public static void Bar(Rect r, float fraction, Color fill, string label = null, GUIStyle style = null)
+        public static void Bar(Rect r, float fraction, Color fill, string label = null, GUIStyle style = null, float trail = -1f)
         {
             if (_skin == null) Build();
             if (Event.current.type == EventType.Repaint)
@@ -139,6 +139,12 @@ namespace FriendSlop.Game
                 GUI.color = new Color(0f, 0f, 0f, 0.55f * prev.a);
                 Nine(r, _bar, 7);
                 fraction = Mathf.Clamp01(fraction);
+                if (trail > fraction + 0.002f)
+                {
+                    // Damage trail: the chunk you just lost lingers in pale red, then drains away.
+                    GUI.color = new Color(1f, 0.85f, 0.75f, 0.85f * prev.a);
+                    Nine(new Rect(r.x + 2, r.y + 2, Mathf.Max(r.height - 4, (r.width - 4) * Mathf.Clamp01(trail)), r.height - 4), _bar, 6);
+                }
                 if (fraction > 0.001f)
                 {
                     GUI.color = new Color(fill.r, fill.g, fill.b, fill.a * prev.a);
@@ -178,7 +184,33 @@ namespace FriendSlop.Game
             s.normal.background = s.hover.background = on ? _tabOn : _tabOff;
             s.active.background = _tabOn;
             s.normal.textColor = s.hover.textColor = on ? new Color(0.18f, 0.1f, 0.04f) : Text;
-            return GUILayout.Button(text, s, opts);
+            bool clicked = GUILayout.Button(text, s, opts);
+            Feedback(clicked);
+            return clicked;
+        }
+
+        // Hover/click feedback for buttons: a soft tick when the mouse moves onto a new button and
+        // a click sound when pressed. IMGUI has no hover events, so we compare the hovered rect.
+        static Rect _hovered;
+        static int _hoverFrame;
+
+        /// <summary>GUILayout.Button with hover/click sounds. Use for every menu button so they all feel the same.</summary>
+        public static bool Btn(string text, params GUILayoutOption[] opts) { bool c = GUILayout.Button(text, opts); Feedback(c); return c; }
+        public static bool Btn(string text, GUIStyle style, params GUILayoutOption[] opts) { bool c = GUILayout.Button(text, style, opts); Feedback(c); return c; }
+
+        /// <summary>Call right after a GUILayout button: plays hover/click sounds.</summary>
+        public static void Feedback(bool clicked)
+        {
+            if (clicked) FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.UiClick, 0.5f);
+            if (Event.current.type != EventType.Repaint || !GUI.enabled) return;
+            var r = GUILayoutUtility.GetLastRect();
+            if (!r.Contains(Event.current.mousePosition)) return;
+            if (r != _hovered || Time.frameCount - _hoverFrame > 2)
+            {
+                if (r != _hovered) FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.UiHover, 0.35f, UnityEngine.Random.Range(0.95f, 1.08f));
+                _hovered = r;
+            }
+            _hoverFrame = Time.frameCount;
         }
 
         /// <summary>Disabled-looking button (GUI.enabled = false still applies the grey).</summary>
@@ -190,6 +222,7 @@ namespace FriendSlop.Game
             var s = _skin.button;
             if (!enabled) { s = new GUIStyle(_skin.button); s.normal.background = s.hover.background = s.active.background = _btnOff; s.normal.textColor = s.hover.textColor = Muted; }
             bool clicked = GUILayout.Button(text, s, opts);
+            Feedback(clicked);
             GUI.enabled = was;
             return clicked;
         }
