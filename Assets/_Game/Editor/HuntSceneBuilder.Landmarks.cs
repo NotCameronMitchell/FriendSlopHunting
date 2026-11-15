@@ -27,7 +27,7 @@ namespace FriendSlop.EditorTools
         {
             var root = new GameObject("Landmarks").transform;
             root.SetParent(world, false);
-            // Invisible walls at the very edge, now that the mountains are climbable foothills.
+            // Invisible walls around the walkable valley (tall enough to cover the peaks they run through).
             var edge = new GameObject("MapEdge").transform;
             edge.SetParent(world, false);
             for (int i = 0; i < 4; i++)
@@ -36,9 +36,9 @@ namespace FriendSlop.EditorTools
                 wall.transform.SetParent(edge, false);
                 bool alongX = i < 2;
                 float s = (i % 2 == 0 ? 1f : -1f) * (MapHalfSize - 2f);
-                wall.transform.localPosition = alongX ? new Vector3(0f, 40f, s) : new Vector3(s, 40f, 0f);
+                wall.transform.localPosition = alongX ? new Vector3(0f, 90f, s) : new Vector3(s, 90f, 0f);
                 var bc = wall.AddComponent<BoxCollider>();
-                bc.size = alongX ? new Vector3(MapHalfSize * 2f, 160f, 2f) : new Vector3(2f, 160f, MapHalfSize * 2f);
+                bc.size = alongX ? new Vector3(MapHalfSize * 2f, 280f, 2f) : new Vector3(2f, 280f, MapHalfSize * 2f);
             }
 
             BuildHogWallow(root, scene, groundY);

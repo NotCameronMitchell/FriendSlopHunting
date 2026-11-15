@@ -8,6 +8,9 @@ namespace FriendSlop.World
         /// <summary>World height of lake surfaces (streams have their own sloping surfaces).</summary>
         public const float WaterY = -0.4f;
 
+        /// <summary>Half-size of the walkable valley (invisible walls); the terrain itself runs further out as backdrop peaks.</summary>
+        public const float PlayHalf = 240f;
+
         /// <summary>Ground height under a point (terrain if present, else 0).</summary>
         public static float HeightAt(Vector3 p)
         {

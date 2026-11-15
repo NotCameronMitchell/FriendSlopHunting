@@ -8,20 +8,25 @@ using UnityEngine.Rendering;
 namespace FriendSlop.EditorTools
 {
     /// <summary>
-    /// Generates the hunting grounds: a 300 m square valley on a mountaintop, ringed by peaks (the
-    /// map border), with rolling hills, a lake and a pond, a stream running down from the
-    /// mountains into the lake and another draining out through a gorge. The ground is painted
-    /// from slope/height/water (grass, forest floor, trampled dirt, sand banks, rock), textures are
-    /// generated in code, and water bodies get flowing transparent surfaces. Camp stays flat at y=0.
+    /// Generates the hunting grounds: a 640 m terrain whose middle ~480 m is a walkable mountain valley
+    /// (rolling hills, a lake and two ponds, a snowmelt creek and an outflow gorge), ringed by a real
+    /// mountain range that keeps rising past the invisible walls, so there is never a visible edge.
+    /// Mountains are ridged noise with domain warping, then shaped by a droplet hydraulic-erosion pass
+    /// (gullies, ridges, scree fans) and a thermal pass (no impossible walls). The ground is painted
+    /// from slope/height/water/erosion with eight generated layers (each with a normal map), and water
+    /// surfaces get guaranteed banks so they can never float above the ground. Camp stays flat at y=0.
     /// </summary>
     public static class TerrainBuilder
     {
-        public const float Half = 150f;
-        const float BaseY = -6f, Height = 84f;
-        const int Res = 513, SplatRes = 512;
+        public const float Half = 320f;                // terrain half-size (640 m square)
+        public const float PlayHalf = Ground.PlayHalf; // invisible walls (480 m walkable)
+        const float BaseY = -8f, Height = 190f;
+        const int Res = 1025, SplatRes = 1024;
         const string Dir = "Assets/_Game/Data/Terrain";
         const string TexDir = "Assets/_Game/Materials/Ground";
-        public static readonly Vector2 TotemXZ = new Vector2(-14f, -106f); // Big Doug's totem, far out on the north ridge
+        /// <summary>Mountain ring (meters from camp, rounded-square): foothills start, main peaks.</summary>
+        const float RingStart = 160f, RingPeak = 245f;
+        public static readonly Vector2 TotemXZ = new Vector2(-24f, -166f); // Big Doug's totem, out on the north ridge
 
         struct Lake { public Vector2 c; public float r, depth; }
 
@@ -36,6 +41,8 @@ namespace FriendSlop.EditorTools
                 len = cum[^1];
             }
             public float Profile(float arc) => Mathf.Lerp(h0, h1, arc / len);
+            /// <summary>Water surface height along the stream.</summary>
+            public float SurfaceY(float arc) => Profile(arc) - 0.45f;
             /// <summary>Distance to the stream's centerline and arc position of the closest point.</summary>
             public float Nearest(Vector2 q, out float arc)
             {
@@ -51,16 +58,19 @@ namespace FriendSlop.EditorTools
             }
         }
 
+        const float StreamHalfWidth = 2.6f;
+
         /// <summary>Out-in-the-wild landmarks (x, flat-pad radius, z): hog wallow, ranger tower, abandoned camp.</summary>
-        public static readonly Vector3 HogWallow = new Vector3(-62f, 12f, -68f);
-        public static readonly Vector3 RangerTower = new Vector3(42f, 9f, -82f);
-        public static readonly Vector3 OldCamp = new Vector3(-92f, 10f, -8f);
+        public static readonly Vector3 HogWallow = new Vector3(-98f, 13f, -104f);
+        public static readonly Vector3 RangerTower = new Vector3(74f, 10f, -132f);
+        public static readonly Vector3 OldCamp = new Vector3(-150f, 11f, -14f);
         public static Vector3[] Landmarks => new[] { HogWallow, RangerTower, OldCamp };
 
         static readonly Lake[] Lakes =
         {
-            new Lake { c = new Vector2(64f, 66f), r = 24f, depth = 1.4f },
-            new Lake { c = new Vector2(-62f, 38f), r = 11f, depth = 1.1f },
+            new Lake { c = new Vector2(98f, 104f), r = 34f, depth = 1.6f },
+            new Lake { c = new Vector2(-98f, 60f), r = 14f, depth = 1.2f },
+            new Lake { c = new Vector2(40f, 150f), r = 9f, depth = 1f },
         };
 
         static Stream[] _streams;
@@ -71,12 +81,14 @@ namespace FriendSlop.EditorTools
                 if (_streams != null) return _streams;
                 _streams = new[]
                 {
-                    // Snowmelt creek: down from the north peaks into the lake.
-                    new Stream { pts = new[] { new Vector2(-30f, 160f), new Vector2(-34f, 128f), new Vector2(-22f, 104f), new Vector2(6f, 96f), new Vector2(32f, 88f), new Vector2(52f, 76f), new Vector2(62f, 68f) },
-                                 h0 = 7f, h1 = Ground.WaterY + 0.45f },
-                    // Outflow: from the lake out through a gorge in the south-east peaks.
-                    new Stream { pts = new[] { new Vector2(70f, 56f), new Vector2(90f, 34f), new Vector2(103f, 4f), new Vector2(120f, -28f), new Vector2(140f, -55f), new Vector2(165f, -78f) },
-                                 h0 = Ground.WaterY + 0.45f, h1 = -1.8f },
+                    // Snowmelt creek: out of a gorge in the north range, winding down into the lake.
+                    new Stream { pts = new[] { new Vector2(-46f, 268f), new Vector2(-54f, 222f), new Vector2(-40f, 182f), new Vector2(-8f, 158f),
+                                               new Vector2(22f, 150f), new Vector2(52f, 136f), new Vector2(76f, 120f), new Vector2(90f, 110f) },
+                                 h0 = 16f, h1 = Ground.WaterY + 0.45f },
+                    // Outflow: from the lake south-east through a gorge that bends out of sight behind the range.
+                    new Stream { pts = new[] { new Vector2(110f, 86f), new Vector2(140f, 50f), new Vector2(165f, 6f), new Vector2(190f, -44f),
+                                               new Vector2(216f, -90f), new Vector2(244f, -118f), new Vector2(270f, -124f), new Vector2(292f, -110f) },
+                                 h0 = Ground.WaterY + 0.45f, h1 = -2.6f },
                 };
                 foreach (var s in _streams) s.Prepare();
                 return _streams;
@@ -98,13 +110,29 @@ namespace FriendSlop.EditorTools
             if (AssetDatabase.LoadAssetAtPath<TerrainData>(path) != null) AssetDatabase.DeleteAsset(path);
             var td = new TerrainData { heightmapResolution = Res, size = new Vector3(Half * 2f, Height, Half * 2f) };
             AssetDatabase.CreateAsset(td, path);
+
+            // (a) Big shapes: hills + the mountain range. (b) Erode the mountains. (c) Carve camp, pads, water.
+            var hm = new float[Res, Res];
+            var mask = new float[Res, Res];
+            for (int iz = 0; iz < Res; iz++)
+                for (int ix = 0; ix < Res; ix++)
+                {
+                    float x = X(ix), z = X(iz);
+                    hm[iz, ix] = BaseHeight(x, z, out float m);
+                    mask[iz, ix] = m;
+                }
+            _sediment = new float[Res, Res];
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Erode(hm, mask, _sediment, 220000, 1337);
+            Thermal(hm, mask, 110, 40f);
+            Debug.Log($"[Terrain] erosion {sw.ElapsedMilliseconds} ms");
+
             var heights = new float[Res, Res];
             for (int iz = 0; iz < Res; iz++)
                 for (int ix = 0; ix < Res; ix++)
                 {
-                    float x = -Half + ix / (float)(Res - 1) * Half * 2f;
-                    float z = -Half + iz / (float)(Res - 1) * Half * 2f;
-                    heights[iz, ix] = Mathf.Clamp01((DesignHeight(x, z) - BaseY) / Height);
+                    float h = Constrain(X(ix), X(iz), hm[iz, ix]);
+                    heights[iz, ix] = Mathf.Clamp01((h - BaseY) / Height);
                 }
             td.SetHeights(0, 0, heights);
 
@@ -121,8 +149,8 @@ namespace FriendSlop.EditorTools
             go.isStatic = true;
             var terrain = go.GetComponent<Terrain>();
             terrain.materialTemplate = TerrainMaterial();
-            terrain.heightmapPixelError = 4f;
-            terrain.basemapDistance = 220f;
+            terrain.heightmapPixelError = 3f;
+            terrain.basemapDistance = 320f;
             terrain.drawInstanced = true;
             terrain.shadowCastingMode = ShadowCastingMode.On;
 
@@ -136,9 +164,11 @@ namespace FriendSlop.EditorTools
         {
             var q = new Vector2(p.x, p.z);
             foreach (var l in Lakes) if (Vector2.Distance(q, l.c) < l.r + margin) return true;
-            foreach (var s in Streams) if (s.Nearest(q, out _) < 2.6f + margin) return true;
+            foreach (var s in Streams) if (s.Nearest(q, out _) < StreamHalfWidth + margin) return true;
             return false;
         }
+
+        static float X(int i) => -Half + i / (float)(Res - 1) * Half * 2f;
 
         // ------------------------------------------------------------------ shape
 
@@ -147,43 +177,60 @@ namespace FriendSlop.EditorTools
         static float Hills(float x, float z)
         {
             float r = Mathf.Sqrt(x * x + z * z);
-            float hills = (P(x / 70f + 100f, z / 70f + 300f) - 0.5f) * 12f
-                        + (P(x / 30f + 50f, z / 30f + 80f) - 0.5f) * 4.8f
-                        + (P(x / 12f + 7f, z / 12f + 9f) - 0.5f) * 1.4f + 2.5f;
+            float hills = (P(x / 85f + 100f, z / 85f + 300f) - 0.5f) * 15f
+                        + (P(x / 34f + 50f, z / 34f + 80f) - 0.5f) * 5.5f
+                        + (P(x / 12f + 7f, z / 12f + 9f) - 0.5f) * 1.4f + 3f;
             hills = Mathf.Max(hills, 0.5f); // no dry pits below lake level (they'd look like they should hold water)
-            return hills * Smooth(24f, 58f, r);  // camp stays flat
+            return hills * Smooth(24f, 60f, r); // camp stays flat
         }
 
-        static float DesignHeight(float x, float z)
+        /// <summary>Ridged multifractal: sharp, branching ridgelines (0..1).</summary>
+        static float Ridged(float x, float z)
         {
-            float r = Mathf.Sqrt(x * x + z * z);
+            float sum = 0f, amp = 1f, freq = 1f / 150f, weight = 1f, norm = 0f;
+            for (int o = 0; o < 6; o++)
+            {
+                float n = 1f - Mathf.Abs(P(x * freq + o * 17.3f + 3.1f, z * freq + o * 31.7f + 7.9f) * 2f - 1f);
+                n *= n;
+                n *= weight;
+                weight = Mathf.Clamp01(n * 1.7f);
+                sum += n * amp; norm += amp;
+                amp *= 0.5f; freq *= 2.07f;
+            }
+            return Mathf.Clamp01(sum / norm / 0.62f);
+        }
+
+        /// <summary>Hills + the mountain range, before erosion. <paramref name="mountain"/> = 0 in the valley, 1 in the range.</summary>
+        static float BaseHeight(float x, float z, out float mountain)
+        {
+            float h = Hills(x, z);
+            float ax = Mathf.Abs(x), az = Mathf.Abs(z);
+            float rounded = Mathf.Pow(ax * ax * ax * ax + az * az * az * az, 0.25f);                      // rounded square
+            // Domain warp the ring so it wanders: bays of valley, spurs of mountain.
+            float warp = (P(x / 95f + 3f, z / 95f + 5f) - 0.5f) * 46f + (P(x / 36f + 9f, z / 36f + 1f) - 0.5f) * 12f;
+            float e = rounded + warp;
+            float m = Smooth(RingStart, RingPeak, e);
+            float outer = Smooth(RingPeak - 40f, Half + 50f, e);                                          // the backdrop keeps rising
+            float wx = x + (P(x / 60f + 50f, z / 60f + 20f) - 0.5f) * 50f, wz = z + (P(x / 60f + 80f, z / 60f + 40f) - 0.5f) * 50f;
+            float ridged = Ridged(wx, wz);
+            float massif = 0.5f + 0.65f * P(x / 120f + 41f, z / 120f + 23f);                              // peaks vs saddles
+            float mm = m * m * (3f - 2f * m);
+            h += mm * massif * (12f + 54f * ridged) + outer * (22f + 40f * ridged);
+            mountain = Mathf.Clamp01(m * 1.3f);
+            return h;
+        }
+
+        /// <summary>After erosion: camp flat, landmark pads, the totem pad, lakes and streams (with water-safe banks).</summary>
+        static float Constrain(float x, float z, float h)
+        {
             var q = new Vector2(x, z);
 
-            float h = Hills(x, z);
-
-            // Mountain ring: a rounded, wobbly ring of peaks and saddles around the valley. Long foothills
-            // roll up out of the hills (no straight walls), crests are rounded, and height varies along the ring.
-            float ax = Mathf.Abs(x), az = Mathf.Abs(z);
-            float rounded = Mathf.Pow(ax * ax * ax * ax + az * az * az * az, 0.25f) / Half;            // rounded square
-            float warp = (P(x / 55f + 3f, z / 55f + 5f) - 0.5f) * 0.2f + (P(x / 22f + 9f, z / 22f + 1f) - 0.5f) * 0.05f;
-            float m = Smooth(0.58f, 1.04f, rounded + warp);
-            float massif = 0.5f + 0.65f * P(x / 60f + 41f, z / 60f + 23f);                            // peaks vs saddles
-            float ridge = 1f - Mathf.Abs(P(x / 32f + 11f, z / 32f + 13f) * 2f - 1f);
-            ridge = ridge * ridge * (3f - 2f * ridge);                                                   // rounded crests
-            float bumps = P(x / 14f + 31f, z / 14f + 17f);
-            float gravel = (P(x / 3.5f + 5f, z / 3.5f + 8f) - 0.5f);                                   // rocky surface detail
-            float mm = m * m * (3f - 2f * m);
-            h += mm * massif * (22f + ridge * 26f + bumps * 8f) + m * gravel * 1.2f;
-
-            // Flat pads for the landmarks, at the local hill height.
             foreach (var lm in Landmarks)
             {
                 float d = Vector2.Distance(q, new Vector2(lm.x, lm.z));
                 if (d < lm.y * 1.6f) h = Mathf.Lerp(Hills(lm.x, lm.z), h, Smooth(lm.y * 0.75f, lm.y * 1.55f, d));
             }
-
-            // Flat pad for the boss totem.
-            h = Mathf.Lerp(Hills(TotemXZ.x, TotemXZ.y), h, Smooth(6f, 15f, Vector2.Distance(q, TotemXZ)));
+            h = Mathf.Lerp(PadHeight(TotemXZ), h, Smooth(6f, 16f, Vector2.Distance(q, TotemXZ)));
 
             foreach (var l in Lakes)
             {
@@ -193,18 +240,43 @@ namespace FriendSlop.EditorTools
                 h = Mathf.Min(h, bowl);
             }
 
+            float dStream = float.MaxValue;
             foreach (var s in Streams)
             {
                 float d = s.Nearest(q, out float arc);
+                dStream = Mathf.Min(dStream, d);
+                float prof = s.Profile(arc), surf = s.SurfaceY(arc);
+                // Valley walls run out until they meet the slope (no cut-off cliff). Past either end of the
+                // stream the valley closes in steeply, so the gorges dead-end inside the mountains.
+                Vector2 a0 = s.pts[0], a1 = s.pts[1], b0 = s.pts[^2], b1 = s.pts[^1];
+                float over = Mathf.Max(Vector2.Dot(q - b1, (b1 - b0).normalized), Vector2.Dot(q - a0, (a0 - a1).normalized));
+                float wall = Mathf.Lerp(0.32f, 1.1f, Smooth(0f, 25f, over));
+                h = Mathf.Min(h, prof + Mathf.Max(0f, d - 3f) * wall);                                     // valley walls
                 if (d > 40f) continue;
-                float prof = s.Profile(arc);
-                h = Mathf.Min(h, prof + Mathf.Max(0f, d - 3f) * 0.3f);                    // valley walls
-                if (d < 7f && !InLake(q, 3f))                                               // banks: never let the water float over a dip
-                    h = Mathf.Max(h, Mathf.Lerp(h, prof + 0.35f, 1f - Smooth(4f, 7f, d)));
-                if (d < 3f) h = Mathf.Min(h, prof - 1.1f * (1f - (d / 3f) * (d / 3f)));    // channel
+                if (d < 7f && !InLake(q, 3f))
+                    h = Mathf.Max(h, Mathf.Lerp(h, prof + 0.35f, 1f - Smooth(4f, 7f, d)));                 // banks
+                if (d < 3f) h = Mathf.Min(h, prof - 1.1f * (1f - (d / 3f) * (d / 3f)));                     // channel
+                // Water-safe edges: the ribbon's rim always sits under ground, its middle always over the bed.
+                if (!InLake(q, 3f))
+                {
+                    if (d > StreamHalfWidth - 0.7f && d < StreamHalfWidth + 1.2f) h = Mathf.Max(h, surf + 0.18f);
+                    else if (d <= StreamHalfWidth - 0.7f) h = Mathf.Min(h, surf - 0.3f);
+                }
+            }
+
+            // Lake rims: the disc reaches r + 2.5 m; keep the ground just above the surface from r + 0.8 out,
+            // except where a stream channel enters (water continues there).
+            foreach (var l in Lakes)
+            {
+                float d = Vector2.Distance(q, l.c);
+                if (d > l.r + 0.8f && d < l.r + 4f && dStream > StreamHalfWidth + 0.5f)
+                    h = Mathf.Max(h, Ground.WaterY + 0.12f + (d - l.r - 0.8f) * 0.08f);
             }
             return h;
         }
+
+        static float PadHeight(Vector2 c) => Hills(c.x, c.y) + BaseHeightMountainOnly(c.x, c.y);
+        static float BaseHeightMountainOnly(float x, float z) => BaseHeight(x, z, out _) - Hills(x, z);
 
         static bool InLake(Vector2 q, float margin)
         {
@@ -214,11 +286,142 @@ namespace FriendSlop.EditorTools
 
         static float Smooth(float a, float b, float x) => Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(a, b, x));
 
+        // ------------------------------------------------------------------ erosion
+
+        static float[,] _sediment;
+
+        /// <summary>
+        /// Droplet hydraulic erosion (after Hans Beyer / Sebastian Lague): raindrops roll downhill, pick up
+        /// soil where they speed up and drop it where they slow down, carving gullies and leaving fans.
+        /// Works in grid units; only rains on the mountains (<paramref name="mask"/>).
+        /// </summary>
+        static void Erode(float[,] hm, float[,] mask, float[,] deposits, int droplets, int seed)
+        {
+            int n = Res;
+            float cell = Half * 2f / (n - 1);
+            for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) hm[y, x] /= cell;
+
+            const int radius = 3;
+            var bx = new System.Collections.Generic.List<int>(); var by = new System.Collections.Generic.List<int>(); var bw = new System.Collections.Generic.List<float>();
+            float wsum = 0f;
+            for (int oy = -radius; oy <= radius; oy++)
+                for (int ox = -radius; ox <= radius; ox++)
+                {
+                    float d = Mathf.Sqrt(ox * ox + oy * oy);
+                    if (d > radius) continue;
+                    float w = 1f - d / radius;
+                    bx.Add(ox); by.Add(oy); bw.Add(w); wsum += w;
+                }
+            for (int i = 0; i < bw.Count; i++) bw[i] /= wsum;
+
+            const float inertia = 0.06f, capacityK = 4f, minCap = 0.01f, depositK = 0.3f, erodeK = 0.25f, evaporate = 0.015f, gravity = 4f;
+            const int life = 50;
+            var rng = new System.Random(seed);
+
+            for (int dI = 0; dI < droplets; dI++)
+            {
+                float px = 0f, py = 0f;
+                bool ok = false;
+                for (int tries = 0; tries < 8 && !ok; tries++)
+                {
+                    px = 4f + (float)rng.NextDouble() * (n - 9);
+                    py = 4f + (float)rng.NextDouble() * (n - 9);
+                    ok = rng.NextDouble() < mask[(int)py, (int)px];
+                }
+                if (!ok) continue;
+
+                float dirX = 0f, dirY = 0f, speed = 1f, water = 1f, sediment = 0f;
+                for (int step = 0; step < life; step++)
+                {
+                    int nx = (int)px, ny = (int)py;
+                    float fx = px - nx, fy = py - ny;
+                    HeightGrad(hm, px, py, out float h0, out float gx, out float gy);
+                    dirX = dirX * inertia - gx * (1f - inertia);
+                    dirY = dirY * inertia - gy * (1f - inertia);
+                    float len = Mathf.Sqrt(dirX * dirX + dirY * dirY);
+                    if (len < 1e-6f) break;
+                    dirX /= len; dirY /= len;
+                    px += dirX; py += dirY;
+                    if (px < radius + 1 || py < radius + 1 || px > n - radius - 2 || py > n - radius - 2) break;
+
+                    HeightGrad(hm, px, py, out float h1, out _, out _);
+                    float dh = h1 - h0;
+                    float cap = Mathf.Max(-dh * speed * water * capacityK, minCap);
+
+                    if (sediment > cap || dh > 0f)
+                    {
+                        float amount = dh > 0f ? Mathf.Min(dh, sediment) : (sediment - cap) * depositK;
+                        sediment -= amount;
+                        hm[ny, nx] += amount * (1 - fx) * (1 - fy);
+                        hm[ny, nx + 1] += amount * fx * (1 - fy);
+                        hm[ny + 1, nx] += amount * (1 - fx) * fy;
+                        hm[ny + 1, nx + 1] += amount * fx * fy;
+                        deposits[ny, nx] += amount;
+                    }
+                    else
+                    {
+                        float amount = Mathf.Min((cap - sediment) * erodeK, -dh);
+                        for (int b = 0; b < bw.Count; b++)
+                        {
+                            int ex = nx + bx[b], ey = ny + by[b];
+                            hm[ey, ex] -= amount * bw[b];
+                        }
+                        sediment += amount;
+                    }
+                    speed = Mathf.Sqrt(Mathf.Max(0.0001f, speed * speed - dh * gravity));
+                    water *= 1f - evaporate;
+                }
+            }
+            for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) { hm[y, x] *= cell; deposits[y, x] *= cell; }
+        }
+
+        static void HeightGrad(float[,] hm, float x, float y, out float h, out float gx, out float gy)
+        {
+            int ix = (int)x, iy = (int)y;
+            float fx = x - ix, fy = y - iy;
+            float nw = hm[iy, ix], ne = hm[iy, ix + 1], sw = hm[iy + 1, ix], se = hm[iy + 1, ix + 1];
+            gx = (ne - nw) * (1 - fy) + (se - sw) * fy;
+            gy = (sw - nw) * (1 - fx) + (se - ne) * fx;
+            h = nw * (1 - fx) * (1 - fy) + ne * fx * (1 - fy) + sw * (1 - fx) * fy + se * fx * fy;
+        }
+
+        /// <summary>Thermal erosion: slopes steeper than the talus angle slump until they're not (no impossible walls).</summary>
+        static void Thermal(float[,] hm, float[,] mask, int iterations, float talusDeg)
+        {
+            int n = Res;
+            float cell = Half * 2f / (n - 1);
+            float talus = Mathf.Tan(talusDeg * Mathf.Deg2Rad) * cell;
+            for (int it = 0; it < iterations; it++)
+                for (int y = 1; y < n - 1; y++)
+                    for (int x = 1; x < n - 1; x++)
+                    {
+                        float m = mask[y, x];
+                        if (m <= 0.02f) continue;
+                        float h = hm[y, x];
+                        Slump(hm, x, y, x + 1, y, h, talus, m);
+                        Slump(hm, x, y, x - 1, y, hm[y, x], talus, m);
+                        Slump(hm, x, y, x, y + 1, hm[y, x], talus, m);
+                        Slump(hm, x, y, x, y - 1, hm[y, x], talus, m);
+                    }
+        }
+
+        static void Slump(float[,] hm, int x, int y, int x2, int y2, float h, float talus, float m)
+        {
+            float diff = h - hm[y2, x2];
+            if (diff <= talus) return;
+            float move = (diff - talus) * 0.45f * m;
+            hm[y, x] -= move;
+            hm[y2, x2] += move;
+        }
+
         // ------------------------------------------------------------------ paint
+
+        // grass, forest floor, dirt, rock, sand, snow, cliff, scree
+        const int LayerCount = 8;
 
         static float[,,] Splat(TerrainData td)
         {
-            var map = new float[SplatRes, SplatRes, 6]; // grass, forest floor, dirt, rock, sand, snow
+            var map = new float[SplatRes, SplatRes, LayerCount];
             for (int iz = 0; iz < SplatRes; iz++)
                 for (int ix = 0; ix < SplatRes; ix++)
                 {
@@ -234,7 +437,12 @@ namespace FriendSlop.EditorTools
                     foreach (var s in Streams) dStream = Mathf.Min(dStream, s.Nearest(q, out _));
                     dWater = Mathf.Min(dWater, dStream - 2.5f);
 
-                    float rock = Mathf.Clamp01(Smooth(30f, 44f, steep) + Smooth(18f, 30f, h) * 0.75f); // grassy foothills, rocky tops
+                    float sed = _sediment != null ? _sediment[Mathf.Clamp(Mathf.RoundToInt(v * (Res - 1)), 0, Res - 1), Mathf.Clamp(Mathf.RoundToInt(u * (Res - 1)), 0, Res - 1)] : 0f;
+                    float noise = P(x / 22f + 70f, z / 22f + 90f);
+
+                    float cliff = Smooth(38f, 52f, steep);
+                    float rock = Mathf.Clamp01(Smooth(27f, 40f, steep) + Smooth(40f, 85f, h) * 0.5f) * (1f - cliff);
+                    float scree = Mathf.Clamp01(sed * 1.6f) * Smooth(8f, 22f, h) * (1f - cliff) + Smooth(22f, 30f, steep) * Smooth(18f, 40f, h) * 0.35f;
                     float sand = (1f - Smooth(2f, 7f, dWater)) * (1f - Smooth(0.6f, 2.4f, h - Ground.WaterY)) + (1f - Smooth(1.5f, 4f, dStream)) * 0.8f;
                     float trail = 1f - Smooth(1.2f, 2.6f, DistToSegment(q, new Vector2(0f, -12f), TotemXZ));
                     foreach (var lm in Landmarks) // worn paths out to each landmark, and a trampled clearing there
@@ -244,17 +452,20 @@ namespace FriendSlop.EditorTools
                         trail = Mathf.Max(trail, (1f - Smooth(lm.y * 0.45f, lm.y * 0.9f, Vector2.Distance(q, lc))) * 0.8f);
                     }
                     float dirt = (1f - Smooth(8f, 17f, r)) * 0.85f + trail + Smooth(0.72f, 0.82f, P(x / 9f + 40f, z / 9f + 40f)) * 0.6f;
-                    float forest = Smooth(0.45f, 0.65f, P(x / 18f + 20f, z / 18f + 60f)) * 0.9f * Smooth(16f, 30f, r);
+                    // Forest floor in patches, and under the pines on the lower slopes (thinning to the treeline).
+                    float forest = Smooth(0.45f, 0.65f, P(x / 18f + 20f, z / 18f + 60f)) * 0.9f * Smooth(16f, 30f, r)
+                                 + Smooth(10f, 22f, h) * (1f - Smooth(38f, 52f, h)) * 0.7f;
                     float grass = 1f;
 
-                    // Snow caps: above a wobbly snowline, sliding off the steepest faces.
-                    float snowline = 27f + (P(x / 30f + 70f, z / 30f + 90f) - 0.5f) * 6f;
-                    float snow = Smooth(snowline, snowline + 5f, h) * (1f - Smooth(52f, 66f, steep) * 0.7f);
-                    rock *= 1f - snow;
-                    float keep = (1f - rock) * (1f - snow);
-                    float[] w = { grass * keep, forest * keep, dirt * keep, rock, Mathf.Clamp01(sand) * keep, snow };
+                    // Snow above a wobbly snowline, sliding off the steepest faces.
+                    float snowline = 70f + (noise - 0.5f) * 14f;
+                    float snow = Smooth(snowline, snowline + 9f, h) * (1f - Smooth(46f, 62f, steep) * 0.8f);
+                    rock *= 1f - snow; cliff *= 1f - snow * 0.6f; scree *= 1f - snow;
+                    float hard = Mathf.Clamp01(rock + cliff + scree);
+                    float keep = (1f - hard) * (1f - snow);
+                    float[] w = { grass * keep, forest * keep, dirt * keep, rock, Mathf.Clamp01(sand) * keep, snow, cliff, scree };
                     float sum = 0f; foreach (var f in w) sum += f;
-                    for (int k = 0; k < 6; k++) map[iz, ix, k] = w[k] / sum;
+                    for (int k = 0; k < LayerCount; k++) map[iz, ix, k] = w[k] / sum;
                 }
             return map;
         }
@@ -266,26 +477,35 @@ namespace FriendSlop.EditorTools
             return Vector2.Distance(q, a + ab * t);
         }
 
+        enum Style { Soft, Rock, Cliff, Scree }
+
         static TerrainLayer[] Layers()
         {
             return new[]
             {
-                Layer("Grass", new Color(0.36f, 0.55f, 0.23f), new Color(0.46f, 0.63f, 0.27f), new Color(0.27f, 0.44f, 0.17f), 8f, speckle: new Color(0.6f, 0.72f, 0.3f)),
-                Layer("ForestFloor", new Color(0.25f, 0.38f, 0.17f), new Color(0.33f, 0.42f, 0.18f), new Color(0.2f, 0.3f, 0.13f), 8f, speckle: new Color(0.45f, 0.32f, 0.16f)),
-                Layer("Dirt", new Color(0.47f, 0.36f, 0.24f), new Color(0.55f, 0.43f, 0.3f), new Color(0.38f, 0.28f, 0.18f), 6f, speckle: new Color(0.62f, 0.56f, 0.48f)),
-                Layer("Rock", new Color(0.47f, 0.47f, 0.49f), new Color(0.58f, 0.58f, 0.6f), new Color(0.33f, 0.33f, 0.36f), 16f, cracks: true),
-                Layer("Sand", new Color(0.64f, 0.57f, 0.41f), new Color(0.72f, 0.65f, 0.48f), new Color(0.52f, 0.46f, 0.33f), 6f, speckle: new Color(0.45f, 0.4f, 0.3f)),
-                Layer("Snow", new Color(0.92f, 0.95f, 1f), new Color(1f, 1f, 1f), new Color(0.78f, 0.84f, 0.93f), 9f, speckle: new Color(0.7f, 0.8f, 0.95f)),
+                Layer("Grass", new Color(0.36f, 0.55f, 0.23f), new Color(0.46f, 0.63f, 0.27f), new Color(0.27f, 0.44f, 0.17f), 8f, Style.Soft, speckle: new Color(0.6f, 0.72f, 0.3f)),
+                Layer("ForestFloor", new Color(0.25f, 0.38f, 0.17f), new Color(0.33f, 0.42f, 0.18f), new Color(0.2f, 0.3f, 0.13f), 8f, Style.Soft, speckle: new Color(0.45f, 0.32f, 0.16f)),
+                Layer("Dirt", new Color(0.47f, 0.36f, 0.24f), new Color(0.55f, 0.43f, 0.3f), new Color(0.38f, 0.28f, 0.18f), 6f, Style.Soft, speckle: new Color(0.62f, 0.56f, 0.48f)),
+                Layer("Rock", new Color(0.47f, 0.46f, 0.47f), new Color(0.6f, 0.59f, 0.6f), new Color(0.32f, 0.31f, 0.33f), 14f, Style.Rock),
+                Layer("Sand", new Color(0.64f, 0.57f, 0.41f), new Color(0.72f, 0.65f, 0.48f), new Color(0.52f, 0.46f, 0.33f), 6f, Style.Soft, speckle: new Color(0.45f, 0.4f, 0.3f)),
+                Layer("Snow", new Color(0.92f, 0.95f, 1f), new Color(1f, 1f, 1f), new Color(0.78f, 0.84f, 0.93f), 11f, Style.Soft, speckle: new Color(0.7f, 0.8f, 0.95f)),
+                Layer("Cliff", new Color(0.38f, 0.36f, 0.36f), new Color(0.52f, 0.5f, 0.49f), new Color(0.22f, 0.21f, 0.23f), 20f, Style.Cliff),
+                Layer("Scree", new Color(0.5f, 0.47f, 0.43f), new Color(0.64f, 0.61f, 0.56f), new Color(0.34f, 0.32f, 0.3f), 5f, Style.Scree),
             };
         }
 
-        static TerrainLayer Layer(string name, Color mid, Color light, Color dark, float tile, Color? speckle = null, bool cracks = false)
+        static TerrainLayer Layer(string name, Color mid, Color light, Color dark, float tile, Style style, Color? speckle = null)
         {
-            var tex = SaveTexture($"{TexDir}/{name}.png", GroundTexture(mid, light, dark, speckle, cracks, name.GetHashCode(), name == "Snow" ? 0.14f : name == "Rock" ? 0.06f : 0.03f), false);
+            float smooth = name == "Snow" ? 0.14f : style == Style.Soft ? 0.03f : 0.06f;
+            var albedo = GroundTexture(mid, light, dark, speckle, style, name.GetHashCode(), smooth, out var heightField);
+            var tex = SaveTexture($"{TexDir}/{name}.png", albedo, false);
+            var nrm = SaveTexture($"{TexDir}/{name}_N.png", NormalFromHeight(heightField, style == Style.Soft ? 2.5f : 5f), true);
             string path = $"{TexDir}/{name}.terrainlayer";
             var layer = AssetDatabase.LoadAssetAtPath<TerrainLayer>(path);
             if (layer == null) { layer = new TerrainLayer(); AssetDatabase.CreateAsset(layer, path); }
             layer.diffuseTexture = tex;
+            layer.normalMapTexture = nrm;
+            layer.normalScale = style == Style.Soft ? 0.6f : 1f;
             layer.tileSize = new Vector2(tile, tile);
             layer.smoothness = 0.05f;
             layer.metallic = 0f;
@@ -293,6 +513,21 @@ namespace FriendSlop.EditorTools
             return layer;
         }
 
+        static Texture2D NormalFromHeight(float[,] hf, float strength)
+        {
+            int n = hf.GetLength(0);
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, true);
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float dx = (hf[y, (x + 1) % n] - hf[y, (x - 1 + n) % n]) * strength;
+                    float dy = (hf[(y + 1) % n, x] - hf[(y - 1 + n) % n, x]) * strength;
+                    var nv = new Vector3(-dx, -dy, 1f).normalized;
+                    tex.SetPixel(x, y, new Color(nv.x * 0.5f + 0.5f, nv.y * 0.5f + 0.5f, nv.z * 0.5f + 0.5f, 1f));
+                }
+            tex.Apply();
+            return tex;
+        }
         // ------------------------------------------------------------------ procedural textures
 
         static int Hash(int x, int y, int seed)
@@ -320,6 +555,17 @@ namespace FriendSlop.EditorTools
             return Mathf.Lerp(Mathf.Lerp(a, b, fx), Mathf.Lerp(c, d, fx), fy);
         }
 
+        /// <summary>Tileable value noise with different cell counts across and down (for streaks).</summary>
+        static float TileNoise2(float u, float v, int periodX, int periodY, int seed)
+        {
+            float x = u * periodX, y = v * periodY;
+            int x0 = Mathf.FloorToInt(x), y0 = Mathf.FloorToInt(y);
+            float fx = x - x0, fy = y - y0;
+            fx = fx * fx * (3f - 2f * fx); fy = fy * fy * (3f - 2f * fy);
+            float L(int a, int b) => (Hash(((a % periodX) + periodX) % periodX, ((b % periodY) + periodY) % periodY, seed) & 0xffff) / 65535f;
+            return Mathf.Lerp(Mathf.Lerp(L(x0, y0), L(x0 + 1, y0), fx), Mathf.Lerp(L(x0, y0 + 1), L(x0 + 1, y0 + 1), fx), fy);
+        }
+
         static float TileFbm(float u, float v, int seed)
         {
             float sum = 0f, amp = 0.5f;
@@ -327,30 +573,82 @@ namespace FriendSlop.EditorTools
             return sum / 0.97f;
         }
 
-        static Texture2D GroundTexture(Color mid, Color light, Color dark, Color? speckle, bool cracks, int seed, float smoothness)
+        /// <summary>
+        /// Tileable ground texture plus a matching height field (for the normal map).
+        /// Soft: fbm + speckles. Rock: chunky facets, fine strata, faint cracks, lichen.
+        /// Cliff: weathered streaks and ledges (reads well even where the terrain UVs stretch).
+        /// Scree: piles of pebbles (cellular).
+        /// </summary>
+        static Texture2D GroundTexture(Color mid, Color light, Color dark, Color? speckle, Style style, int seed, float smoothness, out float[,] heightField)
         {
             const int N = 256;
             var tex = new Texture2D(N, N, TextureFormat.RGBA32, true);
+            heightField = new float[N, N];
             for (int y = 0; y < N; y++)
                 for (int x = 0; x < N; x++)
                 {
                     float u = x / (float)N, v = y / (float)N;
                     float n = TileFbm(u, v, seed);
+                    float hgt = n;
                     Color c = n < 0.5f ? Color.Lerp(dark, mid, n * 2f) : Color.Lerp(mid, light, (n - 0.5f) * 2f);
-                    if (speckle.HasValue && TileNoise(u, v, 64, seed + 99) > 0.82f) c = Color.Lerp(c, speckle.Value, 0.55f);
-                    if (cracks)
+                    if (speckle.HasValue && TileNoise(u, v, 64, seed + 99) > 0.82f) { c = Color.Lerp(c, speckle.Value, 0.55f); hgt += 0.08f; }
+                    switch (style)
                     {
-                        // Layered strata bands (wobbly horizontal stripes) plus dark cracks and lichen.
-                        float strata = Mathf.Sin((v * 9f + TileNoise(u, v, 4, seed + 3) * 1.6f) * Mathf.PI * 2f) * 0.5f + 0.5f;
-                        c = Color.Lerp(c, Color.Lerp(dark, light, 0.5f), (strata - 0.5f) * 0.35f);
-                        float rn = 1f - Mathf.Abs(TileNoise(u, v, 8, seed + 7) * 2f - 1f);
-                        if (rn > 0.93f) c = Color.Lerp(c, dark * 0.8f, (rn - 0.93f) * 6f); // faint cracks (bold ones read as camo from afar)
-                        float rn2 = 1f - Mathf.Abs(TileNoise(u, v, 16, seed + 11) * 2f - 1f);
-                        if (rn2 > 0.965f) c = Color.Lerp(c, dark * 0.85f, (rn2 - 0.965f) * 8f);
-                        if (TileNoise(u, v, 32, seed + 21) > 0.8f) c = Color.Lerp(c, new Color(0.45f, 0.52f, 0.36f), 0.35f); // lichen
+                        case Style.Rock:
+                        {
+                            // Chunky facets: quantized fbm gives flat planes with crisp steps, plus fine strata.
+                            float facet = Mathf.Floor(TileFbm(u, v, seed + 5) * 7f) / 7f;
+                            c = Color.Lerp(c, Color.Lerp(dark, light, facet), 0.45f);
+                            float strata = Mathf.Sin((v * 14f + TileNoise(u, v, 4, seed + 3) * 2f) * Mathf.PI * 2f) * 0.5f + 0.5f;
+                            c = Color.Lerp(c, Color.Lerp(dark, light, 0.55f), (strata - 0.5f) * 0.08f);
+                            float rn = 1f - Mathf.Abs(TileNoise(u, v, 8, seed + 7) * 2f - 1f);
+                            if (rn > 0.94f) c = Color.Lerp(c, dark * 0.75f, (rn - 0.94f) * 7f);
+                            if (TileNoise(u, v, 32, seed + 21) > 0.82f) c = Color.Lerp(c, new Color(0.45f, 0.52f, 0.36f), 0.3f); // lichen
+                            hgt = facet * 0.7f + n * 0.3f - (rn > 0.94f ? (rn - 0.94f) * 4f : 0f);
+                            break;
+                        }
+                        case Style.Cliff:
+                        {
+                            // Long weathering streaks (stretched noise) broken by ledges.
+                            float streak = TileNoise(u, v, 4, seed + 1) * 0.3f + TileNoise(u * 1f, v, 32, seed + 2) * 0.0f;
+                            float s2 = 0f;
+                            for (int o = 0, px = 16; o < 3; o++, px *= 2) s2 += TileNoise2(u, v, px, Mathf.Max(1, px / 4), seed + 10 + o) * (0.5f / (o + 1));
+                            float ledge = Mathf.Repeat(v * 6f + TileNoise(u, v, 4, seed + 4) * 1.2f, 1f);
+                            float ledgeDark = ledge < 0.08f ? 1f - ledge / 0.08f : 0f;
+                            float tone = Mathf.Clamp01(n * 0.5f + s2 * 0.8f + streak);
+                            c = Color.Lerp(dark, light, tone);
+                            c = Color.Lerp(c, dark * 0.8f, ledgeDark * 0.15f);
+                            if (TileNoise(u, v, 32, seed + 21) > 0.85f) c = Color.Lerp(c, new Color(0.42f, 0.48f, 0.34f), 0.25f);
+                            hgt = tone - ledgeDark * 0.25f;
+                            break;
+                        }
+                        case Style.Scree:
+                        {
+                            // Pebbles: distance to jittered cell centers (tileable).
+                            const int cells = 20;
+                            float gx = u * cells, gy = v * cells;
+                            int cx = Mathf.FloorToInt(gx), cy = Mathf.FloorToInt(gy);
+                            float best = 9f; int bestId = 0;
+                            for (int oy = -1; oy <= 1; oy++)
+                                for (int ox = -1; ox <= 1; ox++)
+                                {
+                                    int ix = cx + ox, iy = cy + oy;
+                                    int wx = ((ix % cells) + cells) % cells, wy = ((iy % cells) + cells) % cells;
+                                    int hsh = Hash(wx, wy, seed);
+                                    float jx = (hsh & 0xff) / 255f, jy = ((hsh >> 8) & 0xff) / 255f;
+                                    float d = new Vector2(ix + jx - gx, iy + jy - gy).magnitude;
+                                    if (d < best) { best = d; bestId = hsh; }
+                                }
+                            float pebble = Mathf.Clamp01(1f - best * 1.4f);
+                            float tint = ((bestId >> 16) & 0xff) / 255f;
+                            c = Color.Lerp(dark, Color.Lerp(mid, light, tint), Mathf.Sqrt(pebble));
+                            hgt = pebble;
+                            break;
+                        }
                     }
                     c.a = smoothness; // URP terrain reads smoothness from the diffuse alpha (1 = chrome)
                     tex.SetPixel(x, y, c);
+                    heightField[y, x] = hgt;
                 }
             tex.Apply();
             return tex;
@@ -536,7 +834,9 @@ namespace FriendSlop.EditorTools
             string path = $"{TexDir}/Sky.mat";
             var m = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (m == null) { m = new Material(Shader.Find("Skybox/Procedural")); AssetDatabase.CreateAsset(m, path); }
-            m.SetFloat("_SunDisk", 2f);
+            // No built-in sun disc: DayNightVisuals draws its own sun and moon (the built-in one turned into a dark blot at night).
+            m.SetFloat("_SunDisk", 0f);
+            m.DisableKeyword("_SUNDISK_SIMPLE"); m.DisableKeyword("_SUNDISK_HIGH_QUALITY"); m.EnableKeyword("_SUNDISK_NONE");
             m.SetFloat("_SunSize", 0.045f);
             m.SetFloat("_SunSizeConvergence", 6f);
             m.SetFloat("_AtmosphereThickness", 0.85f);

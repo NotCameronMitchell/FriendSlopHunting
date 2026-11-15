@@ -160,12 +160,12 @@ namespace FriendSlop.EditorTools
             float d = new Vector2(pos.x, pos.z).magnitude;
             float r = (float)rng.NextDouble();
             string model; float scale; float trunkRadius;
-            if (d < 60f)
+            if (d < 90f)
             {
                 if (r < 0.75f) { model = $"CommonTree_{1 + rng.Next(5)}"; scale = 1.05f + (float)rng.NextDouble() * 0.35f; trunkRadius = 0.32f; }
                 else { model = $"Pine_{1 + rng.Next(5)}"; scale = 1f + (float)rng.NextDouble() * 0.3f; trunkRadius = 0.3f; }
             }
-            else if (d < 110f)
+            else if (d < 170f)
             {
                 if (r < 0.55f) { model = $"Pine_{1 + rng.Next(5)}"; scale = 1.1f + (float)rng.NextDouble() * 0.4f; trunkRadius = 0.32f; }
                 else if (r < 0.85f) { model = $"CommonTree_{1 + rng.Next(5)}"; scale = 1.1f + (float)rng.NextDouble() * 0.3f; trunkRadius = 0.34f; }
@@ -192,6 +192,19 @@ namespace FriendSlop.EditorTools
             var rock = Place($"Rock_Medium_{1 + rng.Next(3)}", parent, pos, (float)rng.NextDouble() * 360f, 0.55f + (float)rng.NextDouble() * 0.9f);
             if (rock == null) return;
             rock.name = "Rock";
+            foreach (var mf in rock.GetComponentsInChildren<MeshFilter>())
+                mf.gameObject.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
+        }
+
+        /// <summary>A big boulder or outcrop for the mountainsides: a medium rock scaled up, tilted, partly buried.</summary>
+        public static void Boulder(Transform parent, Vector3 pos, System.Random rng, float sizeMul = 1f)
+        {
+            float s = (2.6f + (float)rng.NextDouble() * 5.5f) * sizeMul;
+            var rock = Place($"Rock_Medium_{1 + rng.Next(3)}", parent, pos, (float)rng.NextDouble() * 360f, s);
+            if (rock == null) return;
+            rock.name = "Boulder";
+            rock.transform.rotation = Quaternion.Euler((float)rng.NextDouble() * 24f - 12f, (float)rng.NextDouble() * 360f, (float)rng.NextDouble() * 24f - 12f);
+            rock.transform.localScale = Vector3.Scale(rock.transform.localScale, new Vector3(1f + (float)rng.NextDouble() * 0.5f, 0.6f + (float)rng.NextDouble() * 0.6f, 1f + (float)rng.NextDouble() * 0.5f));
             foreach (var mf in rock.GetComponentsInChildren<MeshFilter>())
                 mf.gameObject.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
         }
@@ -241,7 +254,7 @@ namespace FriendSlop.EditorTools
                 Proto("Flower_4_Group", 0.35f, 0.2f, 0.3f),
                 Proto("Petal_2", 0.5f, 0.6f, 0.9f),
             };
-            field.count = 75000;
+            field.count = 190000;
             field.useTerrain = true;
         }
 

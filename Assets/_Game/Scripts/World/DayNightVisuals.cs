@@ -16,6 +16,8 @@ namespace FriendSlop.World
         [SerializeField] Light[] nightLights = System.Array.Empty<Light>();
         [SerializeField] float menuTime = 0.36f;
         [SerializeField] Shader starShader;
+        [SerializeField] Shader discShader;
+        [SerializeField] Shader cloudShader;
 
         Light _moon;
         Transform _stars;
@@ -38,6 +40,8 @@ namespace FriendSlop.World
             _nightLightBase = new float[nightLights.Length];
             for (int i = 0; i < nightLights.Length; i++) if (nightLights[i]) _nightLightBase[i] = nightLights[i].intensity;
             BuildStars();
+            BuildSkyDiscs();
+            BuildClouds();
             RenderSettings.ambientMode = AmbientMode.Trilight;
         }
 
@@ -70,7 +74,7 @@ namespace FriendSlop.World
 
             Color fog = Color.Lerp(NightFog, Color.Lerp(DayFog, DuskFog, horizon * 0.7f), day);
             RenderSettings.fogColor = fog;
-            RenderSettings.fogDensity = Mathf.Lerp(0.011f, 0.0055f, day);
+            RenderSettings.fogDensity = Mathf.Lerp(0.009f, 0.0042f, day);
             var cam = Camera.main;
             if (cam && cam.clearFlags == CameraClearFlags.SolidColor) cam.backgroundColor = fog;
 
@@ -83,6 +87,8 @@ namespace FriendSlop.World
             if (_starMat) _starMat.color = new Color(1f, 1f, 1f, Mathf.Clamp01(1f - day * 1.6f));
             var view = NetworkPlayerCamera();
             if (_stars && view) _stars.position = view.position;
+            UpdateSkyDiscs(view, day, horizon);
+            UpdateClouds(day, horizon);
 
             for (int i = 0; i < nightLights.Length; i++)
             {
@@ -103,6 +109,124 @@ namespace FriendSlop.World
         }
 
         static float Smooth(float a, float b, float x) => Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(a, b, x));
+
+        // ------------------------------------------------------------------ sun & moon
+
+        Transform _sunDisc, _moonDisc;
+        Material _sunMat, _moonMat;
+
+        void BuildSkyDiscs()
+        {
+            if (discShader == null) return;
+            _sunMat = new Material(discShader);
+            _sunMat.SetFloat("_Core", 0.26f); _sunMat.SetFloat("_Glow", 0.75f); _sunMat.SetFloat("_Craters", 0f);
+            _moonMat = new Material(discShader);
+            _moonMat.SetFloat("_Core", 0.62f); _moonMat.SetFloat("_Glow", 0.3f); _moonMat.SetFloat("_Craters", 1f);
+            _sunDisc = Disc("SunDisc", _sunMat, 70f);
+            _moonDisc = Disc("MoonDisc", _moonMat, 30f);
+        }
+
+        static Transform Disc(string name, Material mat, float size)
+        {
+            var go = new GameObject(name);
+            var mesh = new Mesh { name = name };
+            float h = size * 0.5f;
+            mesh.vertices = new[] { new Vector3(-h, -h, 0), new Vector3(h, -h, 0), new Vector3(h, h, 0), new Vector3(-h, h, 0) };
+            mesh.uv = new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) };
+            mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+            mesh.bounds = new Bounds(Vector3.zero, Vector3.one * size * 2f);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = mat;
+            r.shadowCastingMode = ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            return go.transform;
+        }
+
+        void UpdateSkyDiscs(Transform view, float day, float horizon)
+        {
+            if (_sunDisc == null || view == null) return;
+            const float dist = 400f;
+            // A directional light shines along its forward; the body sits the other way.
+            Vector3 sunDir = sun ? -sun.transform.forward : Vector3.up;
+            _sunDisc.position = view.position + sunDir * dist;
+            _sunDisc.rotation = Quaternion.LookRotation(sunDir);
+            float sunUp = Smooth(-0.08f, 0.06f, sunDir.y);
+            _sunMat.color = Color.Lerp(new Color(1f, 0.97f, 0.86f), new Color(1f, 0.6f, 0.32f), horizon) * new Color(1f, 1f, 1f, sunUp);
+
+            Vector3 moonDir = _moon ? -_moon.transform.forward : Vector3.up;
+            _moonDisc.position = view.position + moonDir * dist;
+            _moonDisc.rotation = Quaternion.LookRotation(moonDir);
+            float moonUp = Smooth(-0.05f, 0.08f, moonDir.y) * Mathf.Clamp01(1.15f - day * 1.4f);
+            _moonMat.color = new Color(0.9f, 0.93f, 1f, moonUp);
+        }
+
+        // ------------------------------------------------------------------ clouds
+
+        Transform[] _clouds = System.Array.Empty<Transform>();
+        Material _cloudMat;
+        static readonly Vector3 Wind = new Vector3(2.4f, 0f, 0.9f);
+        const float CloudWrap = 620f;
+
+        /// <summary>Puffy clouds drifting over the valley: each one is a handful of squashed spheres merged into one mesh.</summary>
+        void BuildClouds()
+        {
+            if (cloudShader == null) return;
+            _cloudMat = new Material(cloudShader);
+            var tmp = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            var sphere = tmp.GetComponent<MeshFilter>().sharedMesh;
+            Destroy(tmp);
+            var rng = new System.Random(4242);
+            float R(float a, float b) => a + (float)rng.NextDouble() * (b - a);
+            var list = new System.Collections.Generic.List<Transform>();
+            for (int c = 0; c < 30; c++)
+            {
+                float size = R(22f, 60f);
+                int puffs = 5 + rng.Next(7);
+                var combine = new CombineInstance[puffs];
+                for (int p = 0; p < puffs; p++)
+                {
+                    float along = (p / (float)(puffs - 1) - 0.5f) * size * 1.6f;
+                    float s = size * R(0.45f, 0.8f) * (1f - Mathf.Abs(along) / (size * 1.4f));
+                    var pos = new Vector3(along, R(0f, size * 0.22f) + (p % 2 == 0 ? 0f : s * 0.25f), R(-size * 0.25f, size * 0.25f));
+                    combine[p] = new CombineInstance { mesh = sphere, transform = Matrix4x4.TRS(pos, Quaternion.Euler(0f, R(0f, 360f), 0f), new Vector3(s, s * 0.62f, s * R(0.8f, 1.1f))) };
+                }
+                var mesh = new Mesh { name = "Cloud" };
+                mesh.CombineMeshes(combine, true, true);
+                var go = new GameObject("Cloud");
+                go.transform.SetParent(transform, false);
+                go.transform.position = new Vector3(R(-CloudWrap, CloudWrap), R(118f, 170f), R(-CloudWrap, CloudWrap));
+                go.transform.rotation = Quaternion.Euler(0f, R(-25f, 25f) + 20f, 0f);
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var r = go.AddComponent<MeshRenderer>();
+                r.sharedMaterial = _cloudMat;
+                r.shadowCastingMode = ShadowCastingMode.Off;
+                r.receiveShadows = false;
+                list.Add(go.transform);
+            }
+            _clouds = list.ToArray();
+        }
+
+        void UpdateClouds(float day, float horizon)
+        {
+            if (_cloudMat == null) return;
+            float dt = Time.deltaTime;
+            foreach (var c in _clouds)
+            {
+                var p = c.position + Wind * dt;
+                if (p.x > CloudWrap) p.x -= CloudWrap * 2f;
+                if (p.z > CloudWrap) p.z -= CloudWrap * 2f;
+                c.position = p;
+            }
+            Color dayLit = Color.white, dayShade = new Color(0.72f, 0.78f, 0.9f);
+            Color duskLit = new Color(1f, 0.76f, 0.58f), duskShade = new Color(0.58f, 0.46f, 0.58f);
+            Color nightLit = new Color(0.2f, 0.23f, 0.34f), nightShade = new Color(0.08f, 0.09f, 0.15f);
+            Color lit = Color.Lerp(nightLit, Color.Lerp(dayLit, duskLit, horizon * 0.85f), day);
+            Color shade = Color.Lerp(nightShade, Color.Lerp(dayShade, duskShade, horizon * 0.85f), day);
+            _cloudMat.SetColor("_Color", lit);
+            _cloudMat.SetColor("_Shadow", shade);
+            _cloudMat.SetColor("_Rim", Color.Lerp(new Color(0.3f, 0.35f, 0.5f), Color.white, day));
+        }
 
         /// <summary>A dome of star quads around the viewer (drawn behind everything, faded by time of day).</summary>
         void BuildStars()

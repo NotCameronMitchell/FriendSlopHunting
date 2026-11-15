@@ -37,7 +37,7 @@ namespace FriendSlop.EditorTools
         const string NavMeshPath = SceneDir + "/HuntTest_NavMesh.asset";
         const string OldM0ScenePath = SceneDir + "/M0_NetTest.unity";
 
-        const float MapHalfSize = 150f; // = TerrainBuilder.Half
+        const float MapHalfSize = Ground.PlayHalf; // walkable valley (the terrain runs further out as backdrop peaks)
         const float CampClearRadius = 14f;
         static readonly Vector3 SellZonePos = new Vector3(8f, 0f, 0f);
         static readonly Vector3 GunShopPos = new Vector3(-11f, 0f, -1f);
@@ -396,7 +396,7 @@ namespace FriendSlop.EditorTools
 
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogDensity = 0.0055f;
+            RenderSettings.fogDensity = 0.0042f;
             RenderSettings.fogColor = new Color(0.72f, 0.8f, 0.86f);
 
             // ---------- Static scenery (baked into the navmesh) ----------
@@ -430,26 +430,26 @@ namespace FriendSlop.EditorTools
                 t.position += Vector3.up * (g - embed - b.min.y);
             }
             float Steep(Vector3 p) => terrain.terrainData.GetSteepness(
-                Mathf.Clamp01((p.x + MapHalfSize) / (MapHalfSize * 2f)), Mathf.Clamp01((p.z + MapHalfSize) / (MapHalfSize * 2f)));
+                Mathf.Clamp01((p.x + TerrainBuilder.Half) / (TerrainBuilder.Half * 2f)), Mathf.Clamp01((p.z + TerrainBuilder.Half) / (TerrainBuilder.Half * 2f)));
             bool Wild(Vector3 p, float waterMargin, float maxSteep) =>
                 !TerrainBuilder.NearWater(p, waterMargin) && Steep(p) <= maxSteep;
 
             var rng = new System.Random(1337); // same forest every rebuild
             var trees = new GameObject("Trees").transform;
             trees.SetParent(world, false);
-            for (int i = 0, placed = 0; i < 4000 && placed < 520; i++)
+            for (int i = 0, placed = 0; i < 14000 && placed < 1550; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
                 if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || NearLandmark(p, 4f) || !Wild(p, 3f, 30f)) continue;
                 p.y = FootY(p, 0.7f) - 0.08f; // lowest ground around the trunk, so no side floats
-                if (p.y > 22f) continue; // bare peaks
+                if (p.y > 52f || (p.y > 36f && rng.NextDouble() < (p.y - 36f) / 16f)) continue; // thinning to the treeline, bare peaks above
                 NatureArt.Tree(trees, p, rng);
                 placed++;
             }
 
             var rocks = new GameObject("Rocks").transform;
             rocks.SetParent(world, false);
-            for (int i = 0, placed = 0; i < 1200 && placed < 130; i++)
+            for (int i = 0, placed = 0; i < 3000 && placed < 330; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
                 if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || NearLandmark(p, 2f) || (p - SellZonePos).magnitude < 9f || !Wild(p, 1.5f, 45f)) continue;
@@ -460,11 +460,28 @@ namespace FriendSlop.EditorTools
 
             var decor = new GameObject("Decor").transform;
             decor.SetParent(world, false);
-            NatureArt.Decor(decor, rng, MapHalfSize - 3f, 1500,
+            NatureArt.Decor(decor, rng, MapHalfSize - 3f, 3600,
                 p => p.magnitude < CampClearRadius + 1f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || NearLandmark(p, 0f) || (p - SellZonePos).magnitude < 4f || !Wild(p, 0.8f, 32f),
                 GroundY);
             // Sit every rock and plant flush: drop each one so its lowest point is at the lowest ground under its footprint.
             foreach (Transform t in rocks) Settle(t, 0.12f);
+            // Big boulders and outcrops on the mountainsides (inside the walls and on the backdrop): they break up
+            // the long slopes and hide the texture stretching on steep faces.
+            var boulders = new GameObject("Boulders").transform;
+            boulders.SetParent(world, false);
+            for (int i = 0, placed = 0; i < 9000 && placed < 420; i++)
+            {
+                float bh = TerrainBuilder.Half - 12f;
+                var p = new Vector3(((float)rng.NextDouble() * 2f - 1f) * bh, 0f, ((float)rng.NextDouble() * 2f - 1f) * bh);
+                float ring = Mathf.Pow(Mathf.Pow(Mathf.Abs(p.x), 4f) + Mathf.Pow(Mathf.Abs(p.z), 4f), 0.25f);
+                if (ring < 150f || TerrainBuilder.NearWater(p, 4f) || NearLandmark(p, 6f) || NearTotem(p)) continue;
+                float st = Steep(p);
+                if (st < 18f || st > 60f) continue;
+                p.y = GroundY(p);
+                NatureArt.Boulder(boulders, p, rng, ring > MapHalfSize ? 1.6f : 1f);
+                placed++;
+            }
+            foreach (Transform t in boulders) Settle(t, 0.22f);
             foreach (Transform t in decor) Settle(t, 0.06f);
             NatureArt.Grass(world, MapHalfSize - 1f, new[] { new Vector3(0f, 0f, 7f), new Vector3(GunShopPos.x, GunShopPos.z, 6f), new Vector3(SellZonePos.x, SellZonePos.z, 3.5f), new Vector3(TotemPos.x, TotemPos.z, 2.5f), new Vector3(CabinPos.x, CabinPos.z, 7f), new Vector3(CampfirePos.x, CampfirePos.z, 2.5f), new Vector3(LodgePos.x, LodgePos.z, 8f), new Vector3(GaragePos.x, GaragePos.z, 6f), new Vector3(TerrainBuilder.HogWallow.x, TerrainBuilder.HogWallow.z, 10f), new Vector3(TerrainBuilder.RangerTower.x, TerrainBuilder.RangerTower.z, 6f), new Vector3(TerrainBuilder.OldCamp.x, TerrainBuilder.OldCamp.z, 7f) });
             BuildLandmarks(world, scene, GroundY); // before the navmesh bake so animals path around them
@@ -503,6 +520,8 @@ namespace FriendSlop.EditorTools
                 vso.FindProperty("sun").objectReferenceValue = sunLight;
                 vso.FindProperty("skybox").objectReferenceValue = RenderSettings.skybox;
                 vso.FindProperty("starShader").objectReferenceValue = Shader.Find("FriendSlop/Stars");
+                vso.FindProperty("discShader").objectReferenceValue = Shader.Find("FriendSlop/SkyDisc");
+                vso.FindProperty("cloudShader").objectReferenceValue = Shader.Find("FriendSlop/Cloud");
                 SetArray(vso.FindProperty("nightLights"), _nightLights.ToArray());
                 vso.ApplyModifiedPropertiesWithoutUndo();
             }

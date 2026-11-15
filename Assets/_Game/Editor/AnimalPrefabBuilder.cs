@@ -231,6 +231,23 @@ namespace FriendSlop.EditorTools
         /// <summary>v2: the 300 m terrain map. Spread populations into difficulty rings (calm near camp, dangerous at the edge).</summary>
         static void Migrate(AnimalSpecies s, string file)
         {
+            MigrateV2(s, file);
+            // v3: the map grew to a ~480 m playable valley. Push the rings out and add more animals.
+            if (s.dataVersion < 3)
+            {
+                if (s.population > 0)
+                {
+                    s.minSpawnDistance *= 1.55f;
+                    s.maxSpawnDistance = Mathf.Min(s.maxSpawnDistance * 1.6f, 228f);
+                    s.population = Mathf.RoundToInt(s.population * 1.7f);
+                }
+                s.dataVersion = 3;
+                EditorUtility.SetDirty(s);
+            }
+        }
+
+        static void MigrateV2(AnimalSpecies s, string file)
+        {
             if (s.dataVersion >= 2) return;
             (int pop, float min, float max) ring = file switch
             {

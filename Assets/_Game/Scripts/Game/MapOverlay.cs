@@ -128,7 +128,9 @@ namespace FriendSlop.Game
             if (terrain == null) return false;
             var td = terrain.terrainData;
             var origin = terrain.transform.position;
-            _worldRect = new Rect(origin.x, origin.z, td.size.x, td.size.z);
+            // Show the walkable valley (the terrain keeps going past the walls as backdrop peaks).
+            float ph = Mathf.Min(Ground.PlayHalf + 6f, td.size.x * 0.5f);
+            _worldRect = new Rect(-ph, -ph, ph * 2f, ph * 2f);
 
             int hr = td.heightmapResolution;
             var heights = td.GetHeights(0, 0, hr, hr);
@@ -139,6 +141,7 @@ namespace FriendSlop.Game
             {
                 new Color(0.55f, 0.7f, 0.36f), new Color(0.4f, 0.55f, 0.3f), new Color(0.72f, 0.6f, 0.42f),
                 new Color(0.6f, 0.58f, 0.56f), new Color(0.88f, 0.8f, 0.6f), new Color(0.96f, 0.97f, 1f),
+                new Color(0.42f, 0.4f, 0.4f), new Color(0.66f, 0.63f, 0.58f),
             };
             Color water = new Color(0.36f, 0.6f, 0.82f), waterDeep = new Color(0.25f, 0.45f, 0.72f);
             Color paper = new Color(0.95f, 0.9f, 0.78f);
@@ -149,7 +152,8 @@ namespace FriendSlop.Game
             for (int j = 0; j < Res; j++)
                 for (int i = 0; i < Res; i++)
                 {
-                    float u = i / (float)(Res - 1), v = j / (float)(Res - 1);
+                    float u = ((_worldRect.x + i / (float)(Res - 1) * _worldRect.width) - origin.x) / td.size.x;
+                    float v = ((_worldRect.y + j / (float)(Res - 1) * _worldRect.height) - origin.z) / td.size.z;
                     int hx = Mathf.RoundToInt(u * (hr - 1)), hy = Mathf.RoundToInt(v * (hr - 1));
                     float h = H(hx, hy);
 
