@@ -42,3 +42,6 @@
 *.lightmap filter=lfs diff=lfs merge=lfs -text
 LightingData.asset filter=lfs diff=lfs merge=lfs -text
 *.terrainlayer filter=lfs diff=lfs merge=lfs -text
+
+# Terrain data is binary (Unity writes TerrainData as binary): store it byte-for-byte in LFS
+Assets/_Game/Data/Terrain/*.asset filter=lfs diff=lfs merge=lfs -text
