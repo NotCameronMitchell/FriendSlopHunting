@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using FriendSlop.Audio;
 using FriendSlop.Game;
 using FriendSlop.Interaction;
 using Unity.Netcode;
@@ -80,6 +81,7 @@ namespace FriendSlop.Animals
             All.Add(this);
             _lastPos = transform.position;
             IsDead.OnValueChanged += OnDeadChanged;
+            Juggles.OnValueChanged += OnJugglesChanged;
 
             if (IsServer)
             {
@@ -102,9 +104,21 @@ namespace FriendSlop.Animals
         {
             All.Remove(this);
             IsDead.OnValueChanged -= OnDeadChanged;
+            Juggles.OnValueChanged -= OnJugglesChanged;
         }
 
-        void OnDeadChanged(bool previous, bool dead) => ApplyDeadVisuals(dead);
+        void OnDeadChanged(bool previous, bool dead)
+        {
+            ApplyDeadVisuals(dead);
+            if (dead && !previous)
+                SfxPlayer.PlayAt(Sfx.Squeak, transform.position, 0.9f, Random.Range(0.95f, 1.25f), 3f, 60f);
+        }
+
+        void OnJugglesChanged(int previous, int current)
+        {
+            if (current > previous)
+                SfxPlayer.PlayAt(Sfx.Boing, transform.position, 0.9f, 1f + 0.12f * current, 4f, 80f);
+        }
 
         void ApplyDeadVisuals(bool dead)
         {

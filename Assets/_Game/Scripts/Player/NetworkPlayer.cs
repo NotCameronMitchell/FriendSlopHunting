@@ -1,4 +1,5 @@
 using FriendSlop.Animals;
+using FriendSlop.Audio;
 using FriendSlop.Interaction;
 using FriendSlop.World;
 using Unity.Netcode;
@@ -51,6 +52,10 @@ namespace FriendSlop.Player
         float _pendingUntil;
 
         int _releasedFrame = -1;
+        float _recoil;
+        Vector3 _lastStepPos;
+        float _stepDistance;
+        const float stepLength = 2.1f;
 
         /// <summary>True while holding something, and on the frame you let go (so a throw click doesn't also fire).</summary>
         public bool IsCarrying => _held != null || _releasedFrame == Time.frameCount;
@@ -61,6 +66,7 @@ namespace FriendSlop.Player
         public override void OnNetworkSpawn()
         {
             ApplyPlayerColor();
+            _lastStepPos = transform.position;
 
             bool mine = IsOwner;
             if (playerCamera) playerCamera.enabled = mine;
@@ -96,9 +102,14 @@ namespace FriendSlop.Player
             SetCursorLocked(false);
         }
 
+        /// <summary>Kick the camera up; it settles back on its own. Owner only.</summary>
+        public void AddRecoil(float degrees) => _recoil += degrees;
+
         void Update()
         {
-            if (!IsSpawned || !IsOwner) return;
+            if (!IsSpawned) return;
+            UpdateFootsteps();
+            if (!IsOwner) return;
 
             var kb = Keyboard.current;
             var mouse = Mouse.current;
@@ -110,8 +121,31 @@ namespace FriendSlop.Player
             bool controlling = Cursor.lockState == CursorLockMode.Locked;
 
             if (controlling) Look(mouse.delta.ReadValue());
+            _recoil = Mathf.Lerp(_recoil, 0f, Time.deltaTime * 9f);
+            if (cameraPivot) cameraPivot.localRotation = Quaternion.Euler(_pitch - _recoil, 0f, 0f);
             Move(kb, controlling);
             UpdateCarry(kb, mouse, controlling);
+        }
+
+        void UpdateFootsteps()
+        {
+            Vector3 p = transform.position;
+            float dt = Mathf.Max(Time.deltaTime, 0.0001f);
+            Vector3 d = p - _lastStepPos;
+            float verticalSpeed = Mathf.Abs(d.y) / dt;
+            d.y = 0f;
+            float moved = d.magnitude;
+            _lastStepPos = p;
+
+            bool grounded = IsOwner ? _cc.isGrounded : verticalSpeed < 1.5f;
+            if (!grounded || moved > 3f) return; // airborne or teleported
+
+            _stepDistance += moved;
+            if (_stepDistance < stepLength) return;
+            _stepDistance = 0f;
+
+            if (IsOwner) SfxPlayer.Play2D(Sfx.RandomFootstep(), 0.22f);
+            else SfxPlayer.PlayAt(Sfx.RandomFootstep(), p, 0.7f, 1f, minDistance: 1.5f, maxDistance: 25f);
         }
 
         void LateUpdate()
@@ -127,7 +161,6 @@ namespace FriendSlop.Player
             delta *= lookSensitivity;
             transform.Rotate(0f, delta.x, 0f, Space.Self);
             _pitch = Mathf.Clamp(_pitch - delta.y, -85f, 85f);
-            if (cameraPivot) cameraPivot.localRotation = Quaternion.Euler(_pitch, 0f, 0f);
         }
 
         void Move(Keyboard kb, bool controlling)
@@ -180,7 +213,12 @@ namespace FriendSlop.Player
             // Resolve a pending pickup once the host confirms (or give up after a moment).
             if (_pendingPickup != null)
             {
-                if (_pendingPickup.IsHeldByLocalPlayer) { _held = _pendingPickup; _pendingPickup = null; }
+                if (_pendingPickup.IsHeldByLocalPlayer)
+                {
+                    _held = _pendingPickup;
+                    _pendingPickup = null;
+                    SfxPlayer.Play2D(Sfx.Thud, 0.45f, 1.3f);
+                }
                 else if (Time.time > _pendingUntil || _pendingPickup.IsHeld) _pendingPickup = null;
             }
             // Lost it (host released it, object despawned/sold).
@@ -220,6 +258,8 @@ namespace FriendSlop.Player
             _held = null;
             _releasedFrame = Time.frameCount;
             c.RequestDrop(velocity);
+            if (velocity.magnitude > 6f) SfxPlayer.Play2D(Sfx.Whoosh, 0.55f);
+            else SfxPlayer.Play2D(Sfx.Thud, 0.35f);
         }
 
         Carryable LookAtCarryable()

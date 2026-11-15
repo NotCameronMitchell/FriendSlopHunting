@@ -1,5 +1,7 @@
 using System.Collections;
 using FriendSlop.Animals;
+using FriendSlop.Audio;
+using FriendSlop.Game;
 using FriendSlop.Player;
 using FriendSlop.World;
 using Unity.Netcode;
@@ -33,6 +35,7 @@ namespace FriendSlop.Weapons
         [SerializeField] float boxImpulse = 16f;
         [SerializeField] float hipFov = 75f;
         [SerializeField] float aimFov = 35f;
+        [SerializeField] float recoilDegrees = 4f;
 
         NetworkPlayer _player;
         float _nextFireTime;
@@ -84,6 +87,8 @@ namespace FriendSlop.Weapons
                     targetRef = animal.NetworkObject;
                     hasTarget = true;
                     headshot = hit.collider.TryGetComponent(out Hitbox hb) && hb.IsHead;
+                    GameHud.ShowHitMarker(headshot);
+                    SfxPlayer.Play2D(headshot ? Sfx.HeadshotDing : Sfx.HitTick, headshot ? 0.7f : 0.6f);
                 }
                 else if (hit.rigidbody != null && hit.rigidbody.TryGetComponent(out NetworkPhysicsBox box))
                 {
@@ -91,8 +96,14 @@ namespace FriendSlop.Weapons
                 }
             }
 
+            // Feedback for the shooter: bang, kick, flash, bolt.
+            Vector3 muzzlePos = muzzle ? muzzle.position : ray.origin;
+            SfxPlayer.Play2D(Sfx.Gunshot, 0.75f);
+            StartCoroutine(PlayAfter(Sfx.BoltCycle, 0.38f));
+            MuzzleFlash(muzzlePos);
+            _player.AddRecoil(recoilDegrees);
             if (gunModel) gunModel.localPosition = _gunRestPos + new Vector3(0f, 0.02f, -0.12f); // kick
-            SpawnTracer(muzzle ? muzzle.position : ray.origin, end);
+            SpawnTracer(muzzlePos, end);
 
             FireRpc(ray.origin, end, targetRef, hasTarget, headshot, !_player.IsGrounded);
         }
@@ -128,7 +139,29 @@ namespace FriendSlop.Weapons
         void ShotFxRpc(Vector3 origin, Vector3 end)
         {
             // Other players see the tracer start a little below the shooter's eye, roughly at the gun.
-            SpawnTracer(origin + Vector3.down * 0.2f, end);
+            Vector3 gunPos = origin + Vector3.down * 0.2f;
+            SpawnTracer(gunPos, end);
+            SfxPlayer.PlayAt(Sfx.Gunshot, gunPos, 1f, 1f, minDistance: 6f, maxDistance: 260f);
+            MuzzleFlash(gunPos);
+        }
+
+        IEnumerator PlayAfter(AudioClip clip, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            SfxPlayer.Play2D(clip, 0.5f);
+        }
+
+        static void MuzzleFlash(Vector3 position)
+        {
+            var go = new GameObject("MuzzleFlash");
+            go.transform.position = position;
+            var light = go.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.range = 9f;
+            light.intensity = 6f;
+            light.color = new Color(1f, 0.82f, 0.5f);
+            light.shadows = LightShadows.None;
+            Destroy(go, 0.05f);
         }
 
         void SpawnTracer(Vector3 from, Vector3 to)

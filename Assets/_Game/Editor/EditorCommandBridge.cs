@@ -104,6 +104,24 @@ namespace FriendSlop.EditorTools
                     Debug.Log($"[Bridge] selftest-sell → moved carcass worth ${a.SaleValue} onto the pad");
                     break;
                 }
+                case "selftest-sfx":
+                {
+                    var clips = new[]
+                    {
+                        FriendSlop.Audio.Sfx.Gunshot, FriendSlop.Audio.Sfx.BoltCycle, FriendSlop.Audio.Sfx.HitTick,
+                        FriendSlop.Audio.Sfx.HeadshotDing, FriendSlop.Audio.Sfx.Squeak, FriendSlop.Audio.Sfx.Boing,
+                        FriendSlop.Audio.Sfx.ChaChing, FriendSlop.Audio.Sfx.Thud, FriendSlop.Audio.Sfx.Whoosh,
+                        FriendSlop.Audio.Sfx.RandomFootstep(),
+                    };
+                    var sb = new System.Text.StringBuilder("[Bridge] sfx →");
+                    foreach (var c in clips)
+                    {
+                        sb.Append($" {c.name}={c.length:0.00}s");
+                        if (EditorApplication.isPlaying) FriendSlop.Audio.SfxPlayer.Play2D(c, 0.05f);
+                    }
+                    Debug.Log(sb.ToString());
+                    break;
+                }
                 case "selftest-status":
                 {
                     int alive = 0, dead = 0;

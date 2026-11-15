@@ -20,7 +20,45 @@ namespace FriendSlop.Game
         }
 
         readonly List<Toast> _toasts = new List<Toast>();
-        GUIStyle _money, _toast, _hint;
+        GUIStyle _money, _toast, _hint, _marker, _gain;
+
+        // Hit marker (set by the local rifle)
+        static float _hitMarkerUntil;
+        static bool _hitMarkerHead;
+
+        // Money punch
+        int _lastMoney = -1;
+        float _punchStart = -10f;
+        int _lastGain;
+
+        const float HitMarkerSeconds = 0.18f;
+        const float PunchSeconds = 0.6f;
+
+        /// <summary>Flash an X on the crosshair. Red + bigger for headshots.</summary>
+        public static void ShowHitMarker(bool headshot)
+        {
+            _hitMarkerUntil = Time.unscaledTime + HitMarkerSeconds;
+            _hitMarkerHead = headshot;
+        }
+
+        void Update()
+        {
+            var state = GameState.Instance;
+            if (state == null || !state.IsSpawned)
+            {
+                _lastMoney = -1;
+                return;
+            }
+
+            int money = state.Money.Value;
+            if (_lastMoney >= 0 && money > _lastMoney)
+            {
+                _lastGain = money - _lastMoney;
+                _punchStart = Time.unscaledTime;
+                FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.ChaChing, 0.7f);
+            }
+            _lastMoney = money;
+        }
 
         void OnEnable() => GameState.Announced += OnAnnounced;
         void OnDisable() => GameState.Announced -= OnAnnounced;
@@ -40,8 +78,37 @@ namespace FriendSlop.Game
             _toast ??= new GUIStyle(GUI.skin.label) { fontSize = 18, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperCenter };
             _hint ??= new GUIStyle(GUI.skin.label) { fontSize = 16, alignment = TextAnchor.LowerCenter };
 
-            Shadowed(new Rect(Screen.width - 320, 16, 300, 40), $"${state.Money.Value:N0}", _money);
-            Shadowed(new Rect(Screen.width - 320, 50, 300, 24), $"{state.AnimalsSold.Value} sold", _hint);
+            _marker ??= new GUIStyle(GUI.skin.label) { fontSize = 26, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
+            _gain ??= new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperRight };
+
+            // Money with a punch when it goes up.
+            float p = (Time.unscaledTime - _punchStart) / PunchSeconds;
+            bool punching = p >= 0f && p < 1f;
+            float scale = punching ? 1f + 0.45f * Mathf.Sin(p * Mathf.PI) : 1f;
+            _money.fontSize = Mathf.RoundToInt(28 * scale);
+            var prevColor = GUI.color;
+            if (punching) GUI.color = Color.Lerp(new Color(0.4f, 1f, 0.4f), Color.white, p);
+            Shadowed(new Rect(Screen.width - 420, 12, 400, 50), $"${state.Money.Value:N0}", _money);
+            GUI.color = prevColor;
+            Shadowed(new Rect(Screen.width - 320, 56, 300, 24), $"{state.AnimalsSold.Value} sold", _hint);
+
+            float g = (Time.unscaledTime - _punchStart) / 1.4f;
+            if (g >= 0f && g < 1f)
+            {
+                GUI.color = new Color(0.45f, 1f, 0.45f, 1f - g);
+                Shadowed(new Rect(Screen.width - 320, 80 + g * 30f, 300, 30), $"+${_lastGain:N0}", _gain);
+                GUI.color = prevColor;
+            }
+
+            // Hit marker over the crosshair.
+            if (Time.unscaledTime < _hitMarkerUntil)
+            {
+                var c = new Vector2(Screen.width / 2f, Screen.height / 2f);
+                GUI.color = _hitMarkerHead ? new Color(1f, 0.25f, 0.2f) : Color.white;
+                _marker.fontSize = _hitMarkerHead ? 34 : 24;
+                GUI.Label(new Rect(c.x - 30, c.y - 30, 60, 60), "X", _marker);
+                GUI.color = prevColor;
+            }
 
             float now = Time.unscaledTime;
             _toasts.RemoveAll(t => t.Until < now);
