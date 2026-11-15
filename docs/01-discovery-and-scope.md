@@ -143,6 +143,38 @@ Matchmaking with strangers, dedicated servers, anti-cheat, procedural maps, real
 ## 4. Milestones
 Each milestone ends with a **build your friends actually play**.
 
+### MVP re-plan (2026-11-14, after M0/M1 shipped)
+Cameron's MVP priorities, in the agreed build order (**gameplay → mobs → menus → art**):
+
+| # | Milestone | Done when | Status |
+|---|---|---|---|
+| **M0** | Networking spike | Steam 480 + Direct, two PCs connected | ✅ passed with a friend |
+| **M1** | "One Rabbit" slice | Rifle, rabbit AI, carry, sell, shared money, trick shots, juggling | ✅ done (+ sound/juice pass) |
+| **M2a** | **Weapons + shop** | **Pistol is the free starter; ammo is always unlimited.** Trader shop sells the arsenal below with team money. Weapon switching (1–9 / scroll). Every weapon works in multiplayer. | 🔨 in progress |
+| **M2b** | **Mobs & bosses** | Many more animals (aggressive ones that fight back), plus summonable bosses. Absorbs the old M2 animals and the M3 legendary. | next |
+| **M2c** | **Menus** | Main/home menu. **Options:** view and rebind keybinds, volume sliders, push-to-talk toggle, mute/unmute button. **Character customization** with outfits, buyable with in-game money or unlocked by achievements. | |
+| **M2d** | **Art upgrade** | CC0 packs (Quaternius/Kenney): better trees, grass, rocks, and a modular animated character for outfits. Each download needs Cameron's OK. | |
+| **M3+** | Old M3–M5 | Day/night + spooky nights, proximity voice, save/load, finale. Plus `docs/ideas.md`. | later |
+
+**Weapon roster (M2a).** Ammo is unlimited for everything. Prices are first guesses to tune in playtests.
+| Weapon | Type | Feel |
+|---|---|---|
+| Pistol | Semi-auto hitscan | Free starter |
+| Revolver | Semi, heavy | Big damage, slow, great headshots |
+| Uzi | Full-auto hitscan, spread | Spray at close range |
+| Machine gun | Full-auto hitscan | Accurate sustained fire |
+| Minigun | Full-auto, spin-up | Absurd fire rate once spun up |
+| Shotgun | Pellet spread | Launches carcasses: the juggling tool |
+| Bolt rifle | Semi, long range, scope zoom | The current gun |
+| Bow | Arcing projectile | **Silent: doesn't spook animals** |
+| Slingshot | Arcing projectile, goofy | Bonks things |
+| Boomerang | Thrown, returns | Can hit on the way out *and* back |
+| Bazooka | Explosive projectile | Area damage, sends everything flying |
+| **Tank (drivable)** | Vehicle | Deferred to after M2a (needs the vehicle system). Tracked in ideas. |
+
+Default decision (change anytime): **purchases unlock the weapon for the whole team**, paid from the shared pot.
+
+### Original milestone plan (kept for reference)
 | # | Milestone | Done when | Est.* |
 |---|---|---|---|
 | **M0** | **Networking spike (go/no-go)** | Unity 6 project + NGO + `NetBootstrap` with a transport swap. Two capsules walk around in Multiplayer Play Mode locally *and* via Steam 480 across two houses. One synced physics box. Build delivered through itch. | 1–1.5 wks |

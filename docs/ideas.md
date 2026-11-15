@@ -14,6 +14,12 @@ Things we want, but **not until the core loop is done**. Anything new that isn't
 | **Mobs that fight back** | Already a pillar ("dumb animals with attitude": goose, boar). Bump it up when we add M2 animals. |
 | **Toggle-able friendly fire**, set per lobby at creation | Add a lobby settings screen when hosting: friendly fire on/off (stored in Steam lobby data + a NetworkVariable). M3 friendly-fire ragdolls should respect it. |
 
+## Promoted to MVP (see the scope doc §4 re-plan)
+Weapons + shop (pistol starter, unlimited ammo), many more mobs and bosses, options menu (keybinds, volume, push-to-talk, mute), character customization with outfits, better art (CC0 packs).
+
+## Deferred from the weapon roster
+- **Drivable tank**: needs a vehicle system (driver seat, networked vehicle physics, cannon). Natural fit with the planned truck.
+
 ## Earlier parking lot
 - Bow (silent), dynamite, tranquilizer, harpoon
 - Tree stand, trail cam, ghillie suit, bait

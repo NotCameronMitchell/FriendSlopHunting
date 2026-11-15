@@ -1,6 +1,8 @@
 using FriendSlop.Animals;
 using FriendSlop.Audio;
+using FriendSlop.Game;
 using FriendSlop.Interaction;
+using FriendSlop.Weapons;
 using FriendSlop.World;
 using Unity.Netcode;
 using UnityEngine;
@@ -12,7 +14,7 @@ namespace FriendSlop.Player
     /// First-person co-op player. Movement is owner-authoritative: the owning client moves its own
     /// CharacterController and an Owner-mode NetworkTransform replicates it to everyone else.
     /// Shared objects (boxes, carcasses) are changed through server RPCs on those objects.
-    /// Shooting lives in <see cref="Weapons.Rifle"/>.
+    /// Shooting lives in PlayerWeapons.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public class NetworkPlayer : NetworkBehaviour
@@ -115,8 +117,28 @@ namespace FriendSlop.Player
             var mouse = Mouse.current;
             if (kb == null || mouse == null) return;
 
+            if (GameMenus.AnyOpen)
+            {
+                bool close = kb.escapeKey.wasPressedThisFrame
+                             || (ShopMenu.IsOpen && kb.eKey.wasPressedThisFrame)
+                             || (InventoryMenu.IsOpen && kb.tabKey.wasPressedThisFrame);
+                if (close) GameMenus.Close();
+                LocalHint = string.Empty;
+                Move(kb, controlling: false); // keep gravity going
+                return;
+            }
+
+            if (kb.tabKey.wasPressedThisFrame && !IsCarrying)
+            {
+                InventoryMenu.Toggle();
+                return;
+            }
+
             if (kb.escapeKey.wasPressedThisFrame)
                 SetCursorLocked(Cursor.lockState != CursorLockMode.Locked);
+
+            if (Application.isEditor && kb.f9Key.wasPressedThisFrame)
+                GameState.Instance?.RequestDevMoney();
 
             bool controlling = Cursor.lockState == CursorLockMode.Locked;
 
@@ -236,7 +258,19 @@ namespace FriendSlop.Player
             var target = LookAtCarryable();
             if (target == null)
             {
-                LocalHint = string.Empty;
+                var pickup = LookAt<WeaponPickup>(interactRange + 1f);
+                if (pickup != null && pickup.IsSpawned && pickup.Definition != null)
+                {
+                    bool have = TryGetComponent(out PlayerWeapons pw) && pw.Owns(pickup.WeaponIndex.Value);
+                    LocalHint = have ? $"You already have a {pickup.Definition.displayName}" : $"E pick up {pickup.Definition.displayName}";
+                    if (!have && controlling && kb.eKey.wasPressedThisFrame) pickup.RequestPickup();
+                }
+                else if (LookAt<GunShop>(GunShop.InteractRange) != null)
+                {
+                    LocalHint = "E browse the gun shop";
+                    if (controlling && kb.eKey.wasPressedThisFrame) ShopMenu.Open();
+                }
+                else LocalHint = string.Empty;
                 return;
             }
 
@@ -269,6 +303,14 @@ namespace FriendSlop.Player
                 return null;
             var c = hit.collider.GetComponentInParent<Carryable>();
             return c != null && c.IsSpawned && c.CanCarry.Value && !c.IsHeld ? c : null;
+        }
+
+        T LookAt<T>(float range) where T : Component
+        {
+            Transform eye = playerCamera ? playerCamera.transform : transform;
+            return Physics.Raycast(eye.position, eye.forward, out var hit, range, ~0, QueryTriggerInteraction.Ignore)
+                ? hit.collider.GetComponentInParent<T>()
+                : null;
         }
 
         Vector3 LookDirection() => playerCamera ? playerCamera.transform.forward : transform.forward;

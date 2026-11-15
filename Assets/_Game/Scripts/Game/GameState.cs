@@ -1,4 +1,5 @@
 using System;
+using FriendSlop.Weapons;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -20,6 +21,61 @@ namespace FriendSlop.Game
 
         /// <summary>Raised locally on every peer when the host announces something.</summary>
         public static event Action<string> Announced;
+
+        [SerializeField] WeaponCatalog catalog;
+        public WeaponCatalog Catalog => catalog;
+
+        public static string PlayerName(ulong clientId) =>
+            clientId == NetworkManager.ServerClientId ? "Host" : $"Player {clientId}";
+
+        /// <summary>Client: buy a weapon with the team's money; it goes into your own inventory.</summary>
+        public void RequestBuyWeapon(int index)
+        {
+            PlayerWeapons.Local?.NotePendingPurchase(index);
+            BuyWeaponRpc(index);
+        }
+
+        [Rpc(SendTo.Server)]
+        void BuyWeaponRpc(int index, RpcParams rpcParams = default)
+        {
+            var def = catalog != null ? catalog.Get(index) : null;
+            if (def == null || index >= WeaponCatalog.MaxWeapons) return;
+
+            ulong buyer = rpcParams.Receive.SenderClientId;
+            if (!NetworkManager.ConnectedClients.TryGetValue(buyer, out var client) || client.PlayerObject == null) return;
+            if (!client.PlayerObject.TryGetComponent(out PlayerWeapons weapons) || weapons.Owns(index)) return;
+
+            string who = PlayerName(buyer);
+            if (Money.Value < def.price)
+            {
+                AnnounceRpc($"{who} can't afford the {def.displayName} (${def.price:N0}). Go hunt!");
+                return;
+            }
+
+            if (!weapons.ServerGive(index)) return;
+            Money.Value -= def.price;
+            AnnounceRpc($"{who} bought the {def.displayName} for ${def.price:N0}!");
+        }
+
+        /// <summary>Server only: grant money without counting a sale (dev/testing).</summary>
+        public void ServerGrantMoney(int amount)
+        {
+            if (IsServer) Money.Value += amount;
+        }
+
+        /// <summary>Editor-only cheat (F9): +$1,000. Ignored in builds, so friends can't use it.</summary>
+        public void RequestDevMoney()
+        {
+            if (Application.isEditor) DevMoneyRpc();
+        }
+
+        [Rpc(SendTo.Server)]
+        void DevMoneyRpc()
+        {
+            if (!Application.isEditor) return; // the host must also be the editor
+            Money.Value += 1000;
+            AnnounceRpc("[dev] +$1,000");
+        }
 
         void Awake()
         {

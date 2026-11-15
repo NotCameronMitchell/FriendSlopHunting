@@ -30,6 +30,9 @@ namespace FriendSlop.Game
         int _lastMoney = -1;
         float _punchStart = -10f;
         int _lastGain;
+        float _spendStart = -10f;
+        int _lastSpend;
+        GUIStyle _weapon;
 
         const float HitMarkerSeconds = 0.18f;
         const float PunchSeconds = 0.6f;
@@ -56,6 +59,12 @@ namespace FriendSlop.Game
                 _lastGain = money - _lastMoney;
                 _punchStart = Time.unscaledTime;
                 FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.ChaChing, 0.7f);
+            }
+            else if (_lastMoney >= 0 && money < _lastMoney)
+            {
+                _lastSpend = _lastMoney - money;
+                _spendStart = Time.unscaledTime;
+                FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.ChaChing, 0.5f, 0.7f);
             }
             _lastMoney = money;
         }
@@ -100,6 +109,16 @@ namespace FriendSlop.Game
                 GUI.color = prevColor;
             }
 
+            float s = (Time.unscaledTime - _spendStart) / 1.4f;
+            if (s >= 0f && s < 1f)
+            {
+                GUI.color = new Color(1f, 0.4f, 0.35f, 1f - s);
+                Shadowed(new Rect(Screen.width - 320, 80 + s * 30f, 300, 30), $"-${_lastSpend:N0}", _gain);
+                GUI.color = prevColor;
+            }
+
+            DrawWeaponBar();
+
             // Hit marker over the crosshair.
             if (Time.unscaledTime < _hitMarkerUntil)
             {
@@ -124,6 +143,37 @@ namespace FriendSlop.Game
             string hint = NetworkPlayer.LocalHint;
             if (!string.IsNullOrEmpty(hint))
                 Shadowed(new Rect(Screen.width / 2f - 400, Screen.height - 120, 800, 30), hint, _hint);
+        }
+
+        void DrawWeaponBar()
+        {
+            var weapons = FriendSlop.Weapons.PlayerWeapons.Local;
+            var state = GameState.Instance;
+            if (weapons == null || state == null || weapons.Catalog == null) return;
+
+            _weapon ??= new GUIStyle(GUI.skin.label) { fontSize = 15, alignment = TextAnchor.MiddleRight };
+            var catalog = weapons.Catalog;
+            var slots = weapons.Slots();
+            float y = Screen.height - 40f;
+            var prev = GUI.color;
+
+            GUI.color = new Color(1f, 1f, 1f, 0.55f);
+            Shadowed(new Rect(Screen.width - 420, y, 400, 22), "Tab inventory · G drop", _weapon);
+            y -= 26f;
+
+            for (int s = slots.Count - 1; s >= 0; s--)
+            {
+                int i = slots[s];
+                var def = catalog.Get(i);
+                bool on = weapons.Equipped.Value == i;
+                string label = $"{def.displayName}  [{FriendSlop.Weapons.WeaponCatalog.KeyLabel(s)}]";
+                if (on && def.spinUpTime > 0f && weapons.SpinUp < 1f) label = $"spinning {weapons.SpinUp:P0}  " + label;
+                GUI.color = on ? new Color(1f, 0.85f, 0.3f) : new Color(1f, 1f, 1f, 0.6f);
+                _weapon.fontStyle = on ? FontStyle.Bold : FontStyle.Normal;
+                Shadowed(new Rect(Screen.width - 420, y, 400, 22), label, _weapon);
+                y -= 22f;
+            }
+            GUI.color = prev;
         }
 
         static void Shadowed(Rect r, string text, GUIStyle style)

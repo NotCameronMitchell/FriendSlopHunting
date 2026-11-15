@@ -14,6 +14,62 @@ namespace FriendSlop.Audio
 
         static AudioClip _gunshot, _bolt, _hit, _headshot, _squeak, _boing, _chaChing, _thud, _whoosh;
         static AudioClip[] _footsteps;
+        static AudioClip _twang, _thwip, _rocket, _explosion;
+
+        public static AudioClip BowTwang => _twang ??= MakeTwang();
+        public static AudioClip SlingThwip => _thwip ??= MakeThwip();
+        public static AudioClip RocketLaunch => _rocket ??= MakeRocket();
+        public static AudioClip Explosion => _explosion ??= MakeExplosion();
+
+        static AudioClip MakeTwang() =>
+            Build("Twang", 0.45f, (t, i, s) =>
+            {
+                // Plucked string: decaying harmonics with a slight pitch drop.
+                double f = 140 * (1 + 0.06 * Math.Exp(-t * 30));
+                s.Phase += 2 * Math.PI * f / Rate;
+                double v = Math.Sin(s.Phase) + 0.5 * Math.Sin(2 * s.Phase) + 0.25 * Math.Sin(3 * s.Phase) + 0.12 * Math.Sin(5 * s.Phase);
+                return v * Math.Exp(-t * 9) * Math.Min(1, t / 0.002);
+            });
+
+        static AudioClip MakeThwip()
+        {
+            var rng = new System.Random(6);
+            return Build("Thwip", 0.18f, (t, i, s) =>
+            {
+                double n = rng.NextDouble() * 2 - 1;
+                double hp = n - s.Prev; s.Prev = n;
+                double f = 900 - 600 * t / 0.18;                          // falling rubber snap
+                s.Phase += 2 * Math.PI * f / Rate;
+                return (Math.Sin(s.Phase) * 0.6 + hp * 0.3) * Math.Exp(-t * 22);
+            });
+        }
+
+        static AudioClip MakeRocket()
+        {
+            var rng = new System.Random(7);
+            return Build("Rocket", 0.9f, (t, i, s) =>
+            {
+                double n = rng.NextDouble() * 2 - 1;
+                s.Low += (n - s.Low) * 0.12;
+                double thump = Math.Sin(2 * Math.PI * (70 + 60 * Math.Exp(-t * 25)) * t) * Math.Exp(-t * 14);
+                double hiss = s.Low * Math.Exp(-t * 2.5) * 1.4;
+                return thump + hiss;
+            });
+        }
+
+        static AudioClip MakeExplosion()
+        {
+            var rng = new System.Random(8);
+            return Build("Explosion", 1.6f, (t, i, s) =>
+            {
+                double n = rng.NextDouble() * 2 - 1;
+                s.Low += (n - s.Low) * 0.05;                              // deep rumble
+                s.Prev += (n - s.Prev) * 0.35;                            // crunchy debris
+                double boom = Math.Sin(2 * Math.PI * (38 + 50 * Math.Exp(-t * 8)) * t) * Math.Exp(-t * 4);
+                double crack = t < 0.01 ? n : 0;
+                return boom * 1.2 + s.Low * Math.Exp(-t * 2.2) * 3 + s.Prev * Math.Exp(-t * 6) * 0.7 + crack;
+            });
+        }
 
         public static AudioClip Gunshot => _gunshot ??= MakeGunshot();
         public static AudioClip BoltCycle => _bolt ??= MakeBolt();

@@ -49,10 +49,56 @@ namespace FriendSlop.EditorTools
             }
         }
 
+        static Vector3 _shotStart;
+        static FriendSlop.Weapons.WeaponPickup _shotTarget;
+
         static void Run(string cmd)
         {
+            if (cmd.StartsWith("equip ") && int.TryParse(cmd.Substring(6), out int equipIndex))
+            {
+                var pw = FriendSlop.Weapons.PlayerWeapons.Local;
+                pw?.RequestEquip(equipIndex);
+                Debug.Log($"[Bridge] equip {equipIndex} → {pw?.Current?.displayName}");
+                return;
+            }
+
             switch (cmd)
             {
+                case "selftest-shootdrop":
+                {
+                    // Real path: stand 4 m away, aim the camera at the gun's hitbox, fire the equipped weapon.
+                    var pw = FriendSlop.Weapons.PlayerWeapons.Local;
+                    var target = UnityEngine.Object.FindFirstObjectByType<FriendSlop.Weapons.WeaponPickup>();
+                    if (pw == null || target == null) { Debug.LogWarning("[Bridge] selftest-shootdrop: need a player and a dropped gun"); return; }
+                    var aim = target.GetComponent<BoxCollider>().bounds.center;
+                    var cc = pw.GetComponent<CharacterController>();
+                    Vector3 from = aim + new Vector3(-4f, 0f, 0f);
+                    from.y = target.transform.position.y;
+                    cc.enabled = false;
+                    pw.transform.position = from;
+                    pw.transform.rotation = Quaternion.LookRotation(Vector3.right);
+                    cc.enabled = true;
+                    _shotStart = target.transform.position;
+                    _shotTarget = target;
+                    var cam = pw.GetComponentInChildren<Camera>(true);
+                    Vector3 eye = cam.transform.position;
+                    var hits = Physics.RaycastAll(eye, (aim - eye).normalized, 10f, ~0, QueryTriggerInteraction.Ignore);
+                    System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+                    var sbh = new System.Text.StringBuilder();
+                    foreach (var h in hits) sbh.Append($" {h.collider.name}@{h.distance:0.00}");
+                    Debug.Log($"[Bridge] aim ray (eye {eye.y:0.00} → aim {aim.y:0.00}) hits:{sbh}");
+                    FriendSlop.Weapons.Projectile.DebugLog = true;
+                    pw.TestFireAt(aim);
+                    Debug.Log($"[Bridge] shot {target.Definition?.displayName} with {pw.Current?.displayName} from 4 m");
+                    break;
+                }
+                case "selftest-dropmoved":
+                {
+                    if (_shotTarget == null) { Debug.LogWarning("[Bridge] selftest-dropmoved: no target"); return; }
+                    var moved = _shotTarget.transform.position - _shotStart;
+                    Debug.Log($"[Bridge] dropped {_shotTarget.Definition?.displayName} moved {moved.magnitude:0.00} m (dx={moved.x:0.00} dy={moved.y:0.00} dz={moved.z:0.00})");
+                    break;
+                }
                 case "build-scene":
                     if (EditorApplication.isPlaying) { Debug.LogWarning("[Bridge] build-scene: exit Play first"); return; }
                     HuntSceneBuilder.Build(interactive: false);
@@ -62,6 +108,10 @@ namespace FriendSlop.EditorTools
                     if (EditorApplication.isPlaying) { Debug.LogWarning("[Bridge] build-zip: exit Play first"); return; }
                     BuildTools.BuildWindowsZip();
                     Debug.Log("[Bridge] build-zip done");
+                    break;
+                case "refresh":
+                    AssetDatabase.Refresh();
+                    Debug.Log("[Bridge] refresh done");
                     break;
                 case "play":
                     EditorApplication.isPlaying = true;
@@ -120,6 +170,147 @@ namespace FriendSlop.EditorTools
                         if (EditorApplication.isPlaying) FriendSlop.Audio.SfxPlayer.Play2D(c, 0.05f);
                     }
                     Debug.Log(sb.ToString());
+                    break;
+                }
+                case "selftest-money":
+                    FriendSlop.Game.GameState.Instance?.ServerGrantMoney(5000);
+                    Debug.Log($"[Bridge] money → ${FriendSlop.Game.GameState.Instance?.Money.Value}");
+                    break;
+                case "selftest-buy":
+                {
+                    // Buy every weapon through the real purchase RPC, cheapest first.
+                    var gs = FriendSlop.Game.GameState.Instance;
+                    if (gs == null || gs.Catalog == null) { Debug.LogWarning("[Bridge] selftest-buy: no GameState"); return; }
+                    for (int i = 1; i < gs.Catalog.Count; i++) gs.RequestBuyWeapon(i);
+                    Debug.Log("[Bridge] selftest-buy requested");
+                    break;
+                }
+                case "selftest-weapons":
+                {
+                    var gs = FriendSlop.Game.GameState.Instance;
+                    var pw = FriendSlop.Weapons.PlayerWeapons.Local;
+                    Debug.Log($"[Bridge] weapons → owned=0b{System.Convert.ToString(pw != null ? pw.OwnedMask() : 0, 2)} slots={(pw != null ? pw.Slots().Count : 0)} equipped={(pw != null ? pw.Current?.displayName : "none")} money=${gs?.Money.Value} pickupsInWorld={UnityEngine.Object.FindObjectsByType<FriendSlop.Weapons.WeaponPickup>(FindObjectsSortMode.None).Length}");
+                    break;
+                }
+                case "selftest-drop":
+                {
+                    var pw = FriendSlop.Weapons.PlayerWeapons.Local;
+                    if (pw == null) { Debug.LogWarning("[Bridge] selftest-drop: no local player"); return; }
+                    string name = pw.Current?.displayName;
+                    pw.RequestDropEquipped();
+                    Debug.Log($"[Bridge] drop requested → {name}");
+                    break;
+                }
+                case "selftest-pickup":
+                {
+                    var pw = FriendSlop.Weapons.PlayerWeapons.Local;
+                    var pickups = UnityEngine.Object.FindObjectsByType<FriendSlop.Weapons.WeaponPickup>(FindObjectsSortMode.None);
+                    if (pw == null || pickups.Length == 0) { Debug.LogWarning("[Bridge] selftest-pickup: nothing to pick up"); return; }
+                    FriendSlop.Weapons.WeaponPickup nearest = null;
+                    float best = float.MaxValue;
+                    foreach (var p in pickups)
+                    {
+                        float d = (p.transform.position - pw.transform.position).sqrMagnitude;
+                        if (d < best) { best = d; nearest = p; }
+                    }
+                    nearest.RequestPickup();
+                    Debug.Log($"[Bridge] pickup requested → {nearest.Definition?.displayName} at {Mathf.Sqrt(best):0.0} m");
+                    break;
+                }
+                case "selftest-pickupinfo":
+                {
+                    var sb = new System.Text.StringBuilder("[Bridge] pickups →");
+                    foreach (var p in UnityEngine.Object.FindObjectsByType<FriendSlop.Weapons.WeaponPickup>(FindObjectsSortMode.None))
+                    {
+                        var rb = p.GetComponent<Rigidbody>();
+                        var box = p.GetComponent<BoxCollider>();
+                        float ground = Physics.Raycast(p.transform.position + Vector3.up * 2f, Vector3.down, out var gh, 10f, ~0, QueryTriggerInteraction.Ignore) && gh.collider.attachedRigidbody != rb
+                            ? gh.point.y : float.NaN;
+                        var bottom = box.bounds.min.y;
+                        sb.Append($" [{p.Definition?.displayName}: bottom={bottom:0.00} groundY={ground:0.00} gap={(bottom - ground):0.00} sleeping={rb.IsSleeping()} speed={rb.linearVelocity.magnitude:0.00} box={box.size.x:0.00}x{box.size.y:0.00}x{box.size.z:0.00}]");
+                    }
+                    Debug.Log(sb.ToString());
+                    break;
+                }
+                case "selftest-shootpickup":
+                {
+                    var p = UnityEngine.Object.FindFirstObjectByType<FriendSlop.Weapons.WeaponPickup>();
+                    if (p == null) { Debug.LogWarning("[Bridge] selftest-shootpickup: none"); return; }
+                    var before = p.transform.position;
+                    p.GetComponent<FriendSlop.World.NetworkPhysicsBox>().RequestImpulse(Vector3.right * 15f + Vector3.up * 6f, p.transform.position);
+                    Debug.Log($"[Bridge] shot pickup {p.Definition?.displayName} at {before}");
+                    break;
+                }
+                case "selftest-lookdrop":
+                {
+                    var pw = FriendSlop.Weapons.PlayerWeapons.Local;
+                    var p = UnityEngine.Object.FindFirstObjectByType<FriendSlop.Weapons.WeaponPickup>();
+                    if (pw == null || p == null) { Debug.LogWarning("[Bridge] selftest-lookdrop: missing"); return; }
+                    var cc = pw.GetComponent<CharacterController>();
+                    Vector3 from = p.transform.position + new Vector3(-3f, 0f, -1.5f);
+                    from.y = p.transform.position.y + 0.05f;
+                    cc.enabled = false;
+                    pw.transform.position = from;
+                    Vector3 look = p.transform.position - from; look.y = 0f;
+                    pw.transform.rotation = Quaternion.LookRotation(look);
+                    cc.enabled = true;
+                    Debug.Log("[Bridge] looking at the dropped weapon");
+                    break;
+                }
+                case "selftest-inventory":
+                    FriendSlop.Game.InventoryMenu.Toggle();
+                    Debug.Log($"[Bridge] inventory open={FriendSlop.Game.InventoryMenu.IsOpen}");
+                    break;
+                case "selftest-shop":
+                    FriendSlop.Game.GameMenus.Toggle(FriendSlop.Game.GameMenus.Menu.Shop);
+                    Debug.Log($"[Bridge] shop open={FriendSlop.Game.ShopMenu.IsOpen}");
+                    break;
+                case "selftest-lookshop":
+                {
+                    // Teleport the local player in front of the gunsmith, facing the rack, for a screenshot.
+                    var np = FriendSlop.Weapons.PlayerWeapons.Local;
+                    var smith = UnityEngine.Object.FindFirstObjectByType<FriendSlop.World.GunShop>();
+                    if (np == null || smith == null) { Debug.LogWarning("[Bridge] selftest-lookshop: missing player or gunsmith"); return; }
+                    var cc = np.GetComponent<CharacterController>();
+                    cc.enabled = false;
+                    np.transform.position = smith.transform.position + smith.transform.forward * 4.2f + Vector3.up * 0.1f;
+                    np.transform.rotation = Quaternion.LookRotation(-smith.transform.forward);
+                    cc.enabled = true;
+                    Debug.Log("[Bridge] moved to the gun shop");
+                    break;
+                }
+                case "selftest-explode":
+                {
+                    var a = FirstAnimal(dead: false);
+                    var gs = FriendSlop.Game.GameState.Instance;
+                    var bazooka = gs?.Catalog?.Get(gs.Catalog.Count - 1);
+                    if (a == null || bazooka == null || !bazooka.IsExplosive) { Debug.LogWarning("[Bridge] selftest-explode: need an animal and an explosive last weapon"); return; }
+                    FriendSlop.Weapons.Explosions.ServerExplode(a.transform.position + Vector3.right, bazooka, 0);
+                    FriendSlop.Weapons.Explosions.PlayFx(a.transform.position + Vector3.right, bazooka.explosionRadius);
+                    Debug.Log($"[Bridge] selftest-explode → target dead={a.IsDead.Value}");
+                    break;
+                }
+                case "selftest-equip":
+                {
+                    var pw = FriendSlop.Weapons.PlayerWeapons.Local;
+                    if (pw == null) { Debug.LogWarning("[Bridge] selftest-equip: no local player"); return; }
+                    for (int i = pw.Catalog.Count - 1; i >= 0; i--) { pw.RequestEquip(i); if (pw.Equipped.Value == i) break; }
+                    Debug.Log($"[Bridge] equip → {pw.Current?.displayName}");
+                    break;
+                }
+                case "selftest-fireall":
+                {
+                    var pw = FriendSlop.Weapons.PlayerWeapons.Local;
+                    if (pw == null) { Debug.LogWarning("[Bridge] selftest-fireall: no local player"); return; }
+                    var fired = new System.Text.StringBuilder("[Bridge] fireall →");
+                    for (int i = 0; i < pw.Catalog.Count; i++)
+                    {
+                        pw.RequestEquip(i);
+                        if (pw.Equipped.Value != i) { fired.Append($" {i}:locked"); continue; }
+                        pw.TestFire();
+                        fired.Append($" {pw.Current.displayName}");
+                    }
+                    Debug.Log(fired.ToString());
                     break;
                 }
                 case "selftest-status":

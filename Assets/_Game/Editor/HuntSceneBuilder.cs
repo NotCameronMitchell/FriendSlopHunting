@@ -40,6 +40,7 @@ namespace FriendSlop.EditorTools
         const float MapHalfSize = 80f;
         const float CampClearRadius = 14f;
         static readonly Vector3 SellZonePos = new Vector3(8f, 0f, 0f);
+        static readonly Vector3 GunShopPos = new Vector3(-11f, 0f, -1f);
 
         static readonly Dictionary<string, Material> Mats = new Dictionary<string, Material>();
 
@@ -68,14 +69,16 @@ namespace FriendSlop.EditorTools
             CreateMaterials();
 
             var rabbitSpecies = CreateRabbitSpecies();
-            var player = BuildPlayerPrefab();
+            var catalog = WeaponCatalogBuilder.CreateOrUpdate();
+            var pickup = BuildWeaponPickupPrefab(catalog);
+            var player = BuildPlayerPrefab(catalog, pickup);
             var box = BuildBoxPrefab();
             var rabbit = BuildRabbitPrefab(rabbitSpecies);
-            var gameState = BuildGameStatePrefab();
+            var gameState = BuildGameStatePrefab(catalog);
             var spawner = BuildSpawnerPrefab(rabbit);
-            var prefabList = RegisterNetworkPrefabs(player, box, rabbit, gameState, spawner);
+            var prefabList = RegisterNetworkPrefabs(player, box, rabbit, gameState, spawner, pickup);
 
-            BuildScene(player, box, gameState, spawner, prefabList);
+            BuildScene(player, box, gameState, spawner, prefabList, catalog);
 
             if (AssetDatabase.LoadAssetAtPath<SceneAsset>(OldM0ScenePath) != null)
                 AssetDatabase.DeleteAsset(OldM0ScenePath);
@@ -99,6 +102,9 @@ namespace FriendSlop.EditorTools
             Mat("Gun", lit, new Color(0.15f, 0.13f, 0.12f));
             Mat("Tail", lit, new Color(0.95f, 0.95f, 0.92f));
             Mat("Tracer", unlit, new Color(1f, 0.9f, 0.4f));
+            Mat("Plank", lit, new Color(0.58f, 0.42f, 0.27f));
+            Mat("Roof", lit, new Color(0.45f, 0.18f, 0.14f));
+            Mat("Gunsmith", lit, new Color(0.7f, 0.3f, 0.2f));
         }
 
         static Material Mat(string name, Shader shader, Color color)
@@ -135,7 +141,38 @@ namespace FriendSlop.EditorTools
 
         // =========================================================== Prefabs
 
-        static GameObject BuildPlayerPrefab()
+        static GameObject BuildWeaponPickupPrefab(WeaponCatalog catalog)
+        {
+            var root = new GameObject("WeaponPickup");
+            var col = root.AddComponent<BoxCollider>(); // resized at runtime to fit the weapon model
+            col.size = new Vector3(0.15f, 0.15f, 0.6f);
+            var rb = root.AddComponent<Rigidbody>();
+            rb.mass = 1.5f; // light, so even a pistol shot sends it skidding
+            rb.interpolation = RigidbodyInterpolation.Interpolate;
+            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            rb.angularDamping = 0.5f;
+
+            root.AddComponent<NetworkObject>();
+            var nt = root.AddComponent<NetworkTransform>();
+            nt.AuthorityMode = NetworkTransform.AuthorityModes.Server;
+            nt.SyncScaleX = nt.SyncScaleY = nt.SyncScaleZ = false;
+            nt.Interpolate = true;
+            root.AddComponent<NetworkRigidbody>();
+            root.AddComponent<NetworkPhysicsBox>(); // kick it, shoot it, blow it up: same as the camp boxes
+
+            var model = new GameObject("Model").transform;
+            model.SetParent(root.transform, false);
+
+            var pickup = root.AddComponent<WeaponPickup>();
+            var so = new SerializedObject(pickup);
+            so.FindProperty("catalog").objectReferenceValue = catalog;
+            so.FindProperty("modelRoot").objectReferenceValue = model;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            return SavePrefab(root, $"{PrefabDir}/WeaponPickup.prefab");
+        }
+
+        static GameObject BuildPlayerPrefab(WeaponCatalog catalog, GameObject pickupPrefab)
         {
             var root = new GameObject("Player");
 
@@ -167,15 +204,10 @@ namespace FriendSlop.EditorTools
             var listener = pivot.gameObject.AddComponent<AudioListener>();
             listener.enabled = false;
 
-            var gun = new GameObject("Rifle").transform;
-            gun.SetParent(pivot, false);
-            gun.localPosition = new Vector3(0.24f, -0.26f, 0.5f);
-            Visual(PrimitiveType.Cube, "Barrel", gun, new Vector3(0f, 0.02f, 0.18f), new Vector3(0.035f, 0.035f, 0.62f), "Gun");
-            Visual(PrimitiveType.Cube, "Stock", gun, new Vector3(0f, -0.02f, -0.2f), new Vector3(0.06f, 0.1f, 0.3f), "Bark");
-            Visual(PrimitiveType.Cube, "Scope", gun, new Vector3(0f, 0.075f, 0.05f), new Vector3(0.04f, 0.04f, 0.18f), "Gun");
-            var muzzle = new GameObject("Muzzle").transform;
-            muzzle.SetParent(gun, false);
-            muzzle.localPosition = new Vector3(0f, 0.02f, 0.5f);
+            // Weapon models are built at runtime under this holder by PlayerWeapons.
+            var gunHolder = new GameObject("GunHolder").transform;
+            gunHolder.SetParent(pivot, false);
+            gunHolder.localPosition = new Vector3(0.24f, -0.24f, 0.45f);
 
             var hold = new GameObject("HoldPoint").transform;
             hold.SetParent(pivot, false);
@@ -190,12 +222,13 @@ namespace FriendSlop.EditorTools
             SetArray(so.FindProperty("bodyRenderers"), body.GetComponent<Renderer>(), nose.GetComponent<Renderer>());
             so.ApplyModifiedPropertiesWithoutUndo();
 
-            var rifle = root.AddComponent<Rifle>();
-            so = new SerializedObject(rifle);
+            var weapons = root.AddComponent<PlayerWeapons>();
+            so = new SerializedObject(weapons);
+            so.FindProperty("catalog").objectReferenceValue = catalog;
             so.FindProperty("playerCamera").objectReferenceValue = cam;
-            so.FindProperty("muzzle").objectReferenceValue = muzzle;
-            so.FindProperty("gunModel").objectReferenceValue = gun;
+            so.FindProperty("gunHolder").objectReferenceValue = gunHolder;
             so.FindProperty("tracerMaterial").objectReferenceValue = Mats["Tracer"];
+            so.FindProperty("pickupPrefab").objectReferenceValue = pickupPrefab;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             return SavePrefab(root, $"{PrefabDir}/Player.prefab");
@@ -313,11 +346,14 @@ namespace FriendSlop.EditorTools
 
         // =========================================================== Scene
 
-        static GameObject BuildGameStatePrefab()
+        static GameObject BuildGameStatePrefab(WeaponCatalog catalog)
         {
             var go = new GameObject("GameState");
             go.AddComponent<NetworkObject>();
-            go.AddComponent<GameState>();
+            var state = go.AddComponent<GameState>();
+            var so = new SerializedObject(state);
+            so.FindProperty("catalog").objectReferenceValue = catalog;
+            so.ApplyModifiedPropertiesWithoutUndo();
             return SavePrefab(go, $"{PrefabDir}/GameState.prefab");
         }
 
@@ -333,7 +369,7 @@ namespace FriendSlop.EditorTools
         }
 
         static void BuildScene(GameObject playerPrefab, GameObject boxPrefab, GameObject gameStatePrefab,
-                               GameObject spawnerPrefab, NetworkPrefabsList prefabList)
+                               GameObject spawnerPrefab, NetworkPrefabsList prefabList, WeaponCatalog catalog)
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
 
@@ -365,7 +401,7 @@ namespace FriendSlop.EditorTools
             for (int i = 0, placed = 0; i < 400 && placed < 90; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 6f);
-                if (p.magnitude < CampClearRadius) continue;
+                if (p.magnitude < CampClearRadius || NearGunShop(p)) continue;
                 Tree(trees, p, rng);
                 placed++;
             }
@@ -375,7 +411,7 @@ namespace FriendSlop.EditorTools
             for (int i = 0, placed = 0; i < 200 && placed < 28; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 6f);
-                if (p.magnitude < CampClearRadius - 4f) continue;
+                if (p.magnitude < CampClearRadius - 4f || NearGunShop(p)) continue;
                 Rock(rocks, p, rng);
                 placed++;
             }
@@ -394,6 +430,8 @@ namespace FriendSlop.EditorTools
                 col.size = alongX ? new Vector3(MapHalfSize * 2f, 10f, 1f) : new Vector3(1f, 10f, MapHalfSize * 2f);
                 wall.isStatic = true;
             }
+
+            BuildGunShop(world, catalog);
 
             // ---------- NavMesh (bake now, from physics colliders of the static world) ----------
             var navGo = new GameObject("NavMesh");
@@ -483,10 +521,92 @@ namespace FriendSlop.EditorTools
             netGo.AddComponent<ConnectionMenu>();
             EditorUtility.SetDirty(nm);
 
-            new GameObject("HUD").AddComponent<GameHud>();
+            var hud = new GameObject("HUD");
+            hud.AddComponent<GameHud>();
+            hud.AddComponent<ShopMenu>();
+            hud.AddComponent<InventoryMenu>();
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+        }
+
+        /// <summary>
+        /// Open-front hut west of camp: counter, gunsmith (press E to shop), and a display wall
+        /// with every weapon and its price. Built before the navmesh bake so animals path around it.
+        /// </summary>
+        static void BuildGunShop(Transform parent, WeaponCatalog catalog)
+        {
+            var shop = new GameObject("GunShop").transform;
+            shop.SetParent(parent, false);
+            shop.position = GunShopPos;
+
+            // Shell (local space: open front faces +X, toward camp)
+            Solid(shop, "Floor", new Vector3(0f, 0.1f, 0f), new Vector3(6f, 0.2f, 7.5f), "Bark");
+            Solid(shop, "BackWall", new Vector3(-3f, 1.7f, 0f), new Vector3(0.3f, 3.2f, 7.5f), "Plank");
+            Solid(shop, "WallN", new Vector3(0f, 1.7f, 3.6f), new Vector3(6f, 3.2f, 0.3f), "Plank");
+            Solid(shop, "WallS", new Vector3(0f, 1.7f, -3.6f), new Vector3(6f, 3.2f, 0.3f), "Plank");
+            Solid(shop, "Roof", new Vector3(0.3f, 3.45f, 0f), new Vector3(7f, 0.25f, 8.2f), "Roof");
+            Solid(shop, "Counter", new Vector3(1.6f, 0.6f, 0f), new Vector3(0.8f, 1.0f, 4.2f), "Bark");
+            Solid(shop, "PostN", new Vector3(2.9f, 1.7f, 3.6f), new Vector3(0.3f, 3.2f, 0.3f), "Bark");
+            Solid(shop, "PostS", new Vector3(2.9f, 1.7f, -3.6f), new Vector3(0.3f, 3.2f, 0.3f), "Bark");
+
+            // Gunsmith behind the counter
+            var smith = new GameObject("Gunsmith").transform;
+            smith.SetParent(shop, false);
+            smith.localPosition = new Vector3(0.6f, 0.2f, 1.9f); // off to one side so the rack stays visible
+            smith.localRotation = Quaternion.LookRotation(Vector3.right);
+            var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            body.name = "Body";
+            body.transform.SetParent(smith, false);
+            body.transform.localPosition = new Vector3(0f, 1f, 0f);
+            body.GetComponent<Renderer>().sharedMaterial = Mats["Gunsmith"];
+            Visual(PrimitiveType.Cube, "Hat", smith, new Vector3(0f, 2.1f, 0f), new Vector3(0.95f, 0.12f, 0.95f), "Gun");
+            Visual(PrimitiveType.Cube, "HatTop", smith, new Vector3(0f, 2.3f, 0f), new Vector3(0.55f, 0.3f, 0.55f), "Gun");
+            Visual(PrimitiveType.Cube, "Beard", smith, new Vector3(0f, 1.35f, 0.42f), new Vector3(0.45f, 0.3f, 0.12f), "Tail");
+            smith.gameObject.AddComponent<GunShop>();
+
+            // Display wall
+            var rack = new GameObject("WeaponRack");
+            rack.transform.SetParent(shop, false);
+            rack.transform.localPosition = new Vector3(-2.75f, 1.0f, 0f);
+            rack.transform.localRotation = Quaternion.LookRotation(Vector3.right); // faces customers
+            var r = rack.AddComponent<WeaponRack>();
+            var so = new SerializedObject(r);
+            so.FindProperty("catalog").objectReferenceValue = catalog;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            // Sign over the entrance, readable from camp
+            var sign = new GameObject("Sign");
+            sign.transform.SetParent(shop, false);
+            sign.transform.localPosition = new Vector3(3.1f, 3.95f, 0f);
+            sign.transform.rotation = Quaternion.LookRotation(Vector3.left);
+            var text = sign.AddComponent<TextMesh>();
+            text.text = "GUN SHOP";
+            text.anchor = TextAnchor.MiddleCenter;
+            text.alignment = TextAlignment.Center;
+            text.characterSize = 0.16f;
+            text.fontSize = 64;
+            text.color = new Color(1f, 0.85f, 0.4f);
+            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (font != null)
+            {
+                text.font = font;
+                sign.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+            }
+        }
+
+        static bool NearGunShop(Vector3 p) =>
+            Mathf.Abs(p.x - GunShopPos.x) < 7f && Mathf.Abs(p.z - GunShopPos.z) < 7.5f;
+
+        static void Solid(Transform parent, string name, Vector3 localPos, Vector3 scale, string mat)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = name;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPos;
+            go.transform.localScale = scale;
+            go.GetComponent<Renderer>().sharedMaterial = Mats[mat];
+            go.isStatic = true;
         }
 
         static void Tree(Transform parent, Vector3 pos, System.Random rng)
