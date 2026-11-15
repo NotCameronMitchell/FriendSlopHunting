@@ -57,6 +57,7 @@ namespace FriendSlop.Game
             if (_lastMoney >= 0 && money > _lastMoney)
             {
                 _lastGain = money - _lastMoney;
+                FriendSlop.Profile.PlayerProfile.Current.RecordTeamEarnings(_lastGain); // bank career bucks
                 _punchStart = Time.unscaledTime;
                 FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.ChaChing, 0.7f);
             }
@@ -69,8 +70,24 @@ namespace FriendSlop.Game
             _lastMoney = money;
         }
 
-        void OnEnable() => GameState.Announced += OnAnnounced;
-        void OnDisable() => GameState.Announced -= OnAnnounced;
+        void OnEnable()
+        {
+            GameState.Announced += OnAnnounced;
+            FriendSlop.Profile.PlayerProfile.AchievementUnlocked += OnAchievement;
+        }
+
+        void OnAchievement(string id, string name)
+        {
+            var a = FriendSlop.Profile.Cosmetics.FindAchievement(id);
+            var reward = a != null && !string.IsNullOrEmpty(a.RewardId) ? FriendSlop.Profile.Cosmetics.Find(a.RewardId) : null;
+            OnAnnounced(reward != null ? $"ACHIEVEMENT: {name}! Unlocked {reward.Name}" : $"ACHIEVEMENT: {name}!");
+            FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.HeadshotDing, 0.8f, 0.8f);
+        }
+        void OnDisable()
+        {
+            GameState.Announced -= OnAnnounced;
+            FriendSlop.Profile.PlayerProfile.AchievementUnlocked -= OnAchievement;
+        }
 
         void OnAnnounced(string text)
         {

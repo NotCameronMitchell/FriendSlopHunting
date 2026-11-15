@@ -187,71 +187,9 @@ namespace FriendSlop.EditorTools
             var visual = new GameObject("Visual").transform;
             visual.SetParent(root.transform, false);
 
-            Vector3 headPos;
-            switch (s.body)
-            {
-                case BodyStyle.Quadruped:
-                {
-                    float bodyY = leg + H * 0.5f;
-                    var body = Part(PrimitiveType.Capsule, "Body", visual, new Vector3(0f, bodyY, 0f), new Vector3(H, L * 0.5f, H), Quaternion.Euler(90f, 0f, 0f));
-                    fur.Add(body);
-                    float t = Mathf.Max(0.05f, H * 0.2f);
-                    for (int i = 0; i < 4; i++)
-                    {
-                        float x = (i % 2 == 0 ? -1f : 1f) * H * 0.3f;
-                        float z = (i < 2 ? 1f : -1f) * L * 0.32f;
-                        fur.Add(Part(PrimitiveType.Cylinder, $"Leg{i}", visual, new Vector3(x, leg * 0.5f + 0.02f, z), new Vector3(t, leg * 0.5f + 0.02f, t)));
-                    }
-                    fur.Add(Part(PrimitiveType.Cube, "Neck", visual, new Vector3(0f, bodyY + H * 0.35f, L * 0.45f), new Vector3(H * 0.38f, H * 0.75f, H * 0.38f), Quaternion.Euler(-35f, 0f, 0f)));
-                    headPos = new Vector3(0f, bodyY + H * 0.75f, L * 0.5f + head * 0.45f);
-                    fur.Add(Part(PrimitiveType.Cube, "Head", visual, headPos, new Vector3(head * 0.8f, head * 0.75f, head * 1.3f)));
-                    fur.Add(Part(PrimitiveType.Cube, "Tail", visual, new Vector3(0f, bodyY + H * 0.2f, -L * 0.55f), new Vector3(H * 0.15f, H * 0.15f, H * 0.35f), Quaternion.Euler(30f, 0f, 0f)));
-                    if (s.bigEars)
-                        for (int e = -1; e <= 1; e += 2)
-                            fur.Add(Part(PrimitiveType.Cube, "Ear", visual, headPos + new Vector3(e * head * 0.3f, head * 0.5f, -head * 0.3f), new Vector3(head * 0.18f, head * 0.35f, head * 0.1f)));
-                    if (s.antlers)
-                        for (int e = -1; e <= 1; e += 2)
-                        {
-                            Vector3 basePos = headPos + new Vector3(e * head * 0.25f, head * 0.45f, -head * 0.2f);
-                            float a = 1.6f; // antler size relative to head
-                            accent.Add(Part(PrimitiveType.Cube, "Antler", visual, basePos + new Vector3(e * head * 0.35f * a, head * 0.45f * a, 0f), new Vector3(head * 0.1f, head * 1.0f * a, head * 0.1f), Quaternion.Euler(0f, 0f, -e * 35f)));
-                            accent.Add(Part(PrimitiveType.Cube, "Tine", visual, basePos + new Vector3(e * head * 0.75f * a, head * 0.85f * a, head * 0.1f), new Vector3(head * 0.09f, head * 0.5f * a, head * 0.09f), Quaternion.Euler(-25f, 0f, -e * 60f)));
-                            accent.Add(Part(PrimitiveType.Cube, "Tine2", visual, basePos + new Vector3(e * head * 0.45f * a, head * 0.95f * a, -head * 0.1f), new Vector3(head * 0.08f, head * 0.45f * a, head * 0.08f), Quaternion.Euler(20f, 0f, -e * 10f)));
-                        }
-                    if (s.tusks)
-                        for (int e = -1; e <= 1; e += 2)
-                            accent.Add(Part(PrimitiveType.Cube, "Tusk", visual, headPos + new Vector3(e * head * 0.3f, -head * 0.15f, head * 0.6f), new Vector3(head * 0.08f, head * 0.35f, head * 0.08f), Quaternion.Euler(-25f, 0f, 0f)));
-                    AddHitboxes(root, new Vector3(0f, bodyY, 0f), H * 0.5f, L, headPos, head * 0.55f);
-                    break;
-                }
-                case BodyStyle.Bird:
-                {
-                    float bodyY = leg + H * 0.5f;
-                    fur.Add(Part(PrimitiveType.Sphere, "Body", visual, new Vector3(0f, bodyY, 0f), new Vector3(H * 0.95f, H, L)));
-                    fur.Add(Part(PrimitiveType.Cylinder, "Neck", visual, new Vector3(0f, bodyY + H * 0.55f, L * 0.32f), new Vector3(H * 0.22f, H * 0.45f, H * 0.22f), Quaternion.Euler(15f, 0f, 0f)));
-                    headPos = new Vector3(0f, bodyY + H * 1.05f, L * 0.4f);
-                    fur.Add(Part(PrimitiveType.Sphere, "Head", visual, headPos, Vector3.one * head));
-                    accent.Add(Part(PrimitiveType.Cube, "Beak", visual, headPos + new Vector3(0f, -head * 0.1f, head * 0.6f), new Vector3(head * 0.45f, head * 0.2f, head * 0.55f)));
-                    for (int e = -1; e <= 1; e += 2)
-                        accent.Add(Part(PrimitiveType.Cylinder, "Leg", visual, new Vector3(e * H * 0.2f, leg * 0.5f, 0f), new Vector3(0.03f * k, leg * 0.5f, 0.03f * k)));
-                    AddHitboxes(root, new Vector3(0f, bodyY, 0f), H * 0.5f, L, headPos, head * 0.6f);
-                    break;
-                }
-                default: // Hopper (rabbit)
-                {
-                    float bodyY = leg + H * 0.48f;
-                    var body = Part(PrimitiveType.Capsule, "Body", visual, new Vector3(0f, bodyY, 0f), new Vector3(H * 1.28f, L * 0.5f, H * 1.2f), Quaternion.Euler(90f, 0f, 0f));
-                    fur.Add(body);
-                    headPos = new Vector3(0f, bodyY + H * 0.6f, L * 0.48f);
-                    fur.Add(Part(PrimitiveType.Sphere, "Head", visual, headPos, Vector3.one * head));
-                    if (s.bigEars)
-                        for (int e = -1; e <= 1; e += 2)
-                            fur.Add(Part(PrimitiveType.Cube, "Ear", visual, headPos + new Vector3(e * head * 0.2f, head * 0.66f, -head * 0.08f), new Vector3(head * 0.2f, head * 0.8f, head * 0.12f)));
-                    accent.Add(Part(PrimitiveType.Sphere, "Tail", visual, new Vector3(0f, bodyY + H * 0.2f, -L * 0.54f), Vector3.one * H * 0.45f));
-                    AddHitboxes(root, new Vector3(0f, bodyY, 0f), H * 0.64f, L, headPos, head * 0.5f);
-                    break;
-                }
-            }
+            // Chunky cartoon body + personality rig; hitboxes follow its measurements.
+            var built = CritterBuilder.Build(s, file, visual, mat("Animal"));
+            AddHitboxes(root, built.bodyCenter, built.bodyRadius, built.bodyLength, built.headPos, built.headRadius);
 
             var animal = root.AddComponent<Animal>();
             var so = new SerializedObject(animal);
@@ -260,11 +198,6 @@ namespace FriendSlop.EditorTools
             SetArray(so.FindProperty("furRenderers"), fur);
             SetArray(so.FindProperty("accentRenderers"), accent);
             so.ApplyModifiedPropertiesWithoutUndo();
-
-            // A neutral base material; per-species colors come from MaterialPropertyBlocks at runtime.
-            var baseMat = mat("Animal");
-            foreach (var r in fur) r.sharedMaterial = baseMat;
-            foreach (var r in accent) r.sharedMaterial = baseMat;
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, $"{PrefabDir}/{file}.prefab");
             UnityEngine.Object.DestroyImmediate(root);

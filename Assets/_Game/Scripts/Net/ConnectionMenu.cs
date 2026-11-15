@@ -30,15 +30,47 @@ namespace FriendSlop.Net
             _wrap ??= new GUIStyle(GUI.skin.label) { wordWrap = true };
 
             if (FriendSlop.Game.OptionsMenu.OpenFromMainMenu) return; // options screen is on top
-            if (!_net.IsRunning) DrawLobbyMenu();
-            else DrawSessionHud();
+            if (!_net.IsRunning)
+            {
+                FriendSlop.Game.GameMenus.Reset();
+                if (FriendSlop.Profile.CustomizeMenu.IsOpen) return; // customize screen is on top
+                DrawLobbyMenu();
+                DrawHunterCard();
+            }
+            else
+            {
+                FriendSlop.Profile.CustomizeMenu.IsOpen = false;
+                DrawSessionHud();
+            }
+        }
+
+        GUIStyle _big, _bucks;
+
+        /// <summary>Home screen: your hunter (live preview), name, bucks, and a Customize button.</summary>
+        void DrawHunterCard()
+        {
+            var p = FriendSlop.Profile.PlayerProfile.Current;
+            var preview = FriendSlop.Profile.CharacterPreview.Instance;
+            _big ??= new GUIStyle(GUI.skin.label) { fontSize = 24, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperCenter };
+            _bucks ??= new GUIStyle(GUI.skin.label) { fontSize = 18, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperCenter, normal = { textColor = new Color(1f, 0.85f, 0.35f) } };
+
+            float w = 340f, h = 520f;
+            var card = new Rect(Screen.width - w - 30, (Screen.height - h) / 2f, w, h);
+            GUI.Box(card, GUIContent.none);
+            GUI.Label(new Rect(card.x, card.y + 10, w, 32), p.EffectiveName, _big);
+            GUI.Label(new Rect(card.x, card.y + 42, w, 26), $"{p.bucks:N0} bucks", _bucks);
+            if (preview != null)
+                GUI.DrawTexture(new Rect(card.x + 30, card.y + 72, w - 60, (w - 60) * 1.25f), preview.Render(p.outfit, p.head, p.hat, p.accessory, p.colorIndex), ScaleMode.ScaleToFit);
+            if (GUI.Button(new Rect(card.x + 30, card.yMax - 52, w - 60, 38), "Customize"))
+                FriendSlop.Profile.CustomizeMenu.IsOpen = true;
         }
 
         void DrawLobbyMenu()
         {
-            GUILayout.BeginArea(new Rect(20, 20, 340, Screen.height - 40), GUI.skin.box);
-            GUILayout.Label("FriendSlop Hunting — M0 net test", _title);
-            GUILayout.Space(8);
+            GUILayout.BeginArea(new Rect(20, 20, 360, Screen.height - 40), GUI.skin.box);
+            GUILayout.Label("FRIENDSLOP HUNTING", new GUIStyle(_title) { fontSize = 28 });
+            GUILayout.Label("Hunt with your friends. Juggle carcasses. Get wrecked by geese.", _wrap);
+            GUILayout.Space(10);
 
             // ---- Steam ----
             GUILayout.Label("<b>Steam</b> (AppID 480)", new GUIStyle(GUI.skin.label) { richText = true });
@@ -85,7 +117,9 @@ namespace FriendSlop.Net
             if (GUILayout.Button("Join", GUILayout.Height(28))) _net.JoinDirect(_address);
 
             GUILayout.Space(10);
+            if (GUILayout.Button("Customize hunter", GUILayout.Height(28))) FriendSlop.Profile.CustomizeMenu.IsOpen = true;
             if (GUILayout.Button("Options", GUILayout.Height(28))) FriendSlop.Game.OptionsMenu.OpenFromMainMenu = true;
+            if (GUILayout.Button("Quit", GUILayout.Height(28))) Application.Quit();
 
             GUILayout.FlexibleSpace();
             GUILayout.Label($"Status: {_net.Status}", _wrap);

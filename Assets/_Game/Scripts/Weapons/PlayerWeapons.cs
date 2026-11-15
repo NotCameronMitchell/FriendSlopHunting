@@ -68,6 +68,8 @@ namespace FriendSlop.Weapons
         public override void OnNetworkSpawn()
         {
             Equipped.OnValueChanged += OnEquippedChanged;
+            // Others see the gun held at chest height in the hunter's hand, not floating at eye level.
+            if (!IsOwner && gunHolder) { gunHolder.localPosition = new Vector3(0.26f, -0.55f, 0.5f); _holderRest = gunHolder.localPosition; }
             RebuildModel(Equipped.Value);
             if (IsOwner) Local = this;
         }

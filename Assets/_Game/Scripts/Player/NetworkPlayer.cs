@@ -23,6 +23,23 @@ namespace FriendSlop.Player
         /// <summary>The local player's current prompt for the HUD (empty when nothing to show).</summary>
         public static string LocalHint { get; private set; } = string.Empty;
 
+        /// <summary>The local player's camera (name tags face it). Null outside a hunt.</summary>
+        public static Transform LocalCamera { get; private set; }
+
+        /// <summary>Tint the body (from the player's chosen color).</summary>
+        public void SetBodyColor(Color color)
+        {
+            var block = new MaterialPropertyBlock();
+            foreach (var r in bodyRenderers)
+            {
+                if (!r) continue;
+                r.GetPropertyBlock(block);
+                block.SetColor(BaseColorId, color);
+                block.SetColor(ColorId, color);
+                r.SetPropertyBlock(block);
+            }
+        }
+
         [Header("References")]
         [SerializeField] Transform cameraPivot;
         [SerializeField] Camera playerCamera;
@@ -96,6 +113,8 @@ namespace FriendSlop.Player
         /// <summary>Everyone: lie the body down (or stand it back up).</summary>
         public void SetDownPose(bool down)
         {
+            var hunter = GetComponentInChildren<HunterBody>();
+            if (hunter != null) hunter.SetDown(down); // animated flop; the renderer shuffle below is for primitive bodies
             if (_bodyRestPos == null)
             {
                 _bodyRestPos = new Vector3[bodyRenderers.Length];
@@ -130,6 +149,7 @@ namespace FriendSlop.Player
             if (audioListener) audioListener.enabled = mine;
 
             if (!mine) return;
+            LocalCamera = playerCamera ? playerCamera.transform : transform;
 
             // Hide our own body from our camera but keep its shadow.
             foreach (var r in bodyRenderers)
@@ -155,6 +175,7 @@ namespace FriendSlop.Player
         {
             if (!IsOwner) return;
             if (_menuCamera) _menuCamera.SetActive(true);
+            LocalCamera = null;
             LocalHint = string.Empty;
             SetCursorLocked(false);
         }

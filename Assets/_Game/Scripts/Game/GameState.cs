@@ -26,7 +26,7 @@ namespace FriendSlop.Game
         public WeaponCatalog Catalog => catalog;
 
         public static string PlayerName(ulong clientId) =>
-            clientId == NetworkManager.ServerClientId ? "Host" : $"Player {clientId}";
+            FriendSlop.Player.PlayerAppearance.NameOf(clientId);
 
         /// <summary>Client: buy a weapon with the team's money; it goes into your own inventory.</summary>
         public void RequestBuyWeapon(int index)

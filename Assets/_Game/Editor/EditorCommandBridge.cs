@@ -51,6 +51,7 @@ namespace FriendSlop.EditorTools
 
         static Vector3 _shotStart;
         static FriendSlop.Weapons.WeaponPickup _shotTarget;
+        static readonly System.Collections.Generic.List<Animal> _zoo = new System.Collections.Generic.List<Animal>();
 
         static void Run(string cmd)
         {
@@ -64,6 +65,77 @@ namespace FriendSlop.EditorTools
 
             switch (cmd)
             {
+                // ---- Profile / cosmetics (backup first so tests never touch the real profile) ----
+                case "profile-backup":
+                {
+                    string path = System.IO.Path.Combine(Application.persistentDataPath, "profile.json");
+                    if (System.IO.File.Exists(path)) System.IO.File.Copy(path, path + ".bak", true);
+                    Debug.Log($"[Bridge] profile backed up (exists={System.IO.File.Exists(path)})");
+                    break;
+                }
+                case "profile-restore":
+                {
+                    string path = System.IO.Path.Combine(Application.persistentDataPath, "profile.json");
+                    if (System.IO.File.Exists(path + ".bak")) { System.IO.File.Copy(path + ".bak", path, true); System.IO.File.Delete(path + ".bak"); }
+                    else if (System.IO.File.Exists(path)) System.IO.File.Delete(path); // there was no profile before the test
+                    var f = typeof(FriendSlop.Profile.PlayerProfile).GetField("_current", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                    f?.SetValue(null, null); // force reload from disk
+                    Debug.Log($"[Bridge] profile restored → bucks={FriendSlop.Profile.PlayerProfile.Current.bucks} hat={FriendSlop.Profile.PlayerProfile.Current.hat}");
+                    break;
+                }
+                case "profile-reset":
+                    FriendSlop.Profile.PlayerProfile.ResetForTesting();
+                    Debug.Log("[Bridge] profile reset (test)");
+                    break;
+                case "profile-print":
+                {
+                    var p = FriendSlop.Profile.PlayerProfile.Current;
+                    Debug.Log($"[Bridge] profile → name='{p.EffectiveName}' bucks={p.bucks} kills={p.kills} heads={p.headshots} hat={p.hat} acc={p.accessory} color={p.colorIndex} owned=[{string.Join(",", p.owned)}] ach=[{string.Join(",", p.achievements)}]");
+                    break;
+                }
+                case "profile-bucks":
+                    FriendSlop.Profile.PlayerProfile.Current.AddBucks(1000);
+                    Debug.Log($"[Bridge] bucks → {FriendSlop.Profile.PlayerProfile.Current.bucks}");
+                    break;
+                case "profile-buy":
+                {
+                    var p = FriendSlop.Profile.PlayerProfile.Current;
+                    bool ok = p.TrySpend(400);
+                    if (ok) { p.Grant("tophat"); p.hat = "tophat"; p.accessory = "scarf"; p.colorIndex = 2; p.Save(); }
+                    Debug.Log($"[Bridge] buy tophat → ok={ok} bucks={p.bucks}");
+                    break;
+                }
+                case "profile-kills":
+                {
+                    var p = FriendSlop.Profile.PlayerProfile.Current;
+                    for (int i = 0; i < 10; i++) p.RecordKill("Wolf", headshot: true, jumpShot: i == 0, longShot: i < 5, boss: false);
+                    p.RecordKill("Moose", false, false, false, false);
+                    Debug.Log($"[Bridge] kills recorded → ach=[{string.Join(",", p.achievements)}] owned=[{string.Join(",", p.owned)}]");
+                    break;
+                }
+                case "profile-push":
+                {
+                    var hp = FriendSlop.Player.PlayerHealth.Local;
+                    hp?.GetComponent<FriendSlop.Player.PlayerAppearance>()?.PushFromProfile();
+                    Debug.Log("[Bridge] appearance pushed from profile");
+                    break;
+                }
+                case "selftest-players":
+                {
+                    var sb = new System.Text.StringBuilder("[Bridge] players →");
+                    foreach (var a in UnityEngine.Object.FindObjectsByType<FriendSlop.Player.PlayerAppearance>(FindObjectsSortMode.None))
+                        sb.Append($" [{a.OwnerClientId}: '{a.DisplayName.Value}' hat={a.HatIndex.Value} acc={a.AccessoryIndex.Value} color={a.ColorIndex.Value}]");
+                    Debug.Log(sb.ToString());
+                    break;
+                }
+                case "selftest-customize":
+                    FriendSlop.Profile.CustomizeMenu.IsOpen = !FriendSlop.Profile.CustomizeMenu.IsOpen;
+                    Debug.Log($"[Bridge] customize open={FriendSlop.Profile.CustomizeMenu.IsOpen}");
+                    break;
+                case "selftest-leave":
+                    NetBootstrap.Instance?.Leave();
+                    Debug.Log("[Bridge] left session");
+                    break;
                 case "selftest-pause":
                     FriendSlop.Game.GameMenus.Show(FriendSlop.Game.GameMenus.Menu.Pause);
                     Debug.Log($"[Bridge] pause open={FriendSlop.Game.GameMenus.Open}");
@@ -266,6 +338,56 @@ namespace FriendSlop.EditorTools
                     if (EditorApplication.isPlaying) { Debug.LogWarning("[Bridge] build-zip: exit Play first"); return; }
                     BuildTools.BuildWindowsZip();
                     Debug.Log("[Bridge] build-zip done");
+                    break;
+                case "selftest-zoo":
+                {
+                    // Line up one of every species in front of the host for a photo (AI paused).
+                    var nm = Unity.Netcode.NetworkManager.Singleton;
+                    var hp = FriendSlop.Player.PlayerHealth.Local;
+                    if (nm == null || !nm.IsServer || hp == null) { Debug.LogWarning("[Bridge] selftest-zoo: host first"); return; }
+                    var np = hp.GetComponent<FriendSlop.Player.NetworkPlayer>();
+                    np.Teleport(new Vector3(0f, 0.2f, -7f));
+                    np.transform.rotation = Quaternion.identity;
+                    var prefabs = new System.Collections.Generic.List<GameObject>();
+                    foreach (var guid in AssetDatabase.FindAssets("t:Prefab", new[] { "Assets/_Game/Prefabs/Animals" }))
+                        prefabs.Add(AssetDatabase.LoadAssetAtPath<GameObject>(AssetDatabase.GUIDToAssetPath(guid)));
+                    prefabs.Sort((a, b) => a.GetComponent<Animal>().Species.bodyLength.CompareTo(b.GetComponent<Animal>().Species.bodyLength));
+                    _zoo.Clear();
+                    int n = 0;
+                    foreach (var pf in prefabs)
+                    {
+                        var sp = pf.GetComponent<Animal>().Species;
+                        Vector3 at = sp.isBoss ? new Vector3(0f, 0f, 13f) : new Vector3(-8f + n++ * 2.3f, 0f, 1.5f + Mathf.Abs(n - 4.5f) * 0.6f);
+                        var go = UnityEngine.Object.Instantiate(pf, at, Quaternion.Euler(0f, 180f, 0f));
+                        go.GetComponent<Unity.Netcode.NetworkObject>().Spawn(true);
+                        var agent = go.GetComponent<UnityEngine.AI.NavMeshAgent>();
+                        if (agent) agent.enabled = false; // hold still for the photo
+                        _zoo.Add(go.GetComponent<Animal>());
+                    }
+                    Debug.Log($"[Bridge] zoo → {_zoo.Count} animals");
+                    break;
+                }
+                case "selftest-zoo-angry":
+                    foreach (var a in _zoo) if (a) a.IsAngry.Value = !a.IsAngry.Value;
+                    Debug.Log("[Bridge] zoo angry toggled");
+                    break;
+                case "selftest-zoo-kill":
+                    foreach (var a in _zoo) if (a && !a.IsDead.Value) a.ServerApplyHit(99999f, Vector3.forward * 0.2f, ShotStyle.None, 0);
+                    Debug.Log("[Bridge] zoo killed");
+                    break;
+                case "selftest-cam":
+                {
+                    var cam = FriendSlop.Player.NetworkPlayer.LocalCamera;
+                    var hp = FriendSlop.Player.PlayerHealth.Local;
+                    var hunter = hp != null ? hp.GetComponentInChildren<FriendSlop.Player.HunterBody>() : null;
+                    var anim = hunter != null ? hunter.GetComponent<Animator>() : null;
+                    Debug.Log($"[Bridge] cam pos={(cam ? cam.position.ToString("0.00") : "-")} euler={(cam ? cam.eulerAngles.ToString("0.0") : "-")} local={(cam ? cam.localPosition.ToString("0.00") : "-")} player={(hp ? hp.transform.position.ToString("0.00") : "-")} " +
+                              $"hunter={(hunter ? hunter.transform.localPosition.ToString("0.00") + " rot " + hunter.transform.localEulerAngles.ToString("0") : "-")} state={(anim ? anim.GetCurrentAnimatorStateInfo(0).shortNameHash.ToString() : "-")} speed={(anim ? anim.GetFloat("Speed").ToString("0.0") : "-")} grounded={(anim ? anim.GetBool("Grounded").ToString() : "-")}");
+                    break;
+                }
+                case "art-dump":
+                    ArtInspector.Dump("Assets/_Game/ThirdParty");
+                    ArtInspector.Bones("Assets/_Game/ThirdParty/KayKitAdventurers/Characters/Knight.fbx");
                     break;
                 case "refresh":
                     AssetDatabase.Refresh();

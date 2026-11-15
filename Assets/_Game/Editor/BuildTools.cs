@@ -57,6 +57,13 @@ namespace FriendSlop.EditorTools
             if (File.Exists(zipPath)) File.Delete(zipPath);
             ZipFile.CreateFromDirectory(WindowsDir, zipPath, System.IO.Compression.CompressionLevel.Optimal, includeBaseDirectory: false);
 
+            // Keep only the newest zip so old builds don't pile up.
+            foreach (var old in Directory.GetFiles(BuildRoot, "FriendSlopHunting-Windows-*.zip"))
+            {
+                if (Path.GetFullPath(old) == Path.GetFullPath(zipPath)) continue;
+                try { File.Delete(old); } catch (IOException e) { Debug.LogWarning($"[FriendSlop] Couldn't delete old zip {old}: {e.Message}"); }
+            }
+
             double mb = new FileInfo(zipPath).Length / (1024.0 * 1024.0);
             Debug.Log($"[FriendSlop] Build OK → {Path.GetFullPath(zipPath)} ({mb:F1} MB)");
             EditorUtility.RevealInFinder(zipPath);

@@ -69,6 +69,7 @@ namespace FriendSlop.Animals
         Vector3 _lastPos;
         float _hopPhase;
         Vector3 _visualRestPos;
+        CritterRig _rig;
 
         public AnimalSpecies Species => species;
         public Carryable Carry => _carry;
@@ -96,6 +97,7 @@ namespace FriendSlop.Animals
             _carry = GetComponent<Carryable>();
             _agent.enabled = false; // only the host turns it on, once spawned on the navmesh
             if (visualRoot) _visualRestPos = visualRoot.localPosition;
+            _rig = GetComponentInChildren<CritterRig>(true);
             Tint(furRenderers, species != null ? species.furColor : Color.white);
             Tint(accentRenderers, species != null ? species.accentColor : Color.white);
         }
@@ -462,6 +464,7 @@ namespace FriendSlop.Animals
 
             _carry.ServerSetCarryable(true);
 
+            PlayerProgress.Of(shooterId)?.ServerCreditKill(species, style); // stats + achievements for the killer
             string who = GameState.PlayerName(shooterId);
             if (species.isBoss)
             {
@@ -515,6 +518,7 @@ namespace FriendSlop.Animals
         {
             PlayVoice(VoiceKind.Attack);
             if (visualRoot) StartCoroutine(Lunge());
+            if (_rig) _rig.Attack();
         }
 
         void PlayVoice(VoiceKind kind)
@@ -531,6 +535,7 @@ namespace FriendSlop.Animals
                 default: volume = 0.55f; range = 35f; break;
             }
             if (species.isBoss) range *= 2f;
+            if (_rig && kind != VoiceKind.Death) _rig.Say(kind == VoiceKind.Idle ? 0.3f : 0.55f, kind == VoiceKind.Idle ? 0.7f : 1f);
             SfxPlayer.PlayAt(Sfx.ForVoice(species.voice), transform.position, volume, pitch, 3f * species.scale, range);
         }
 

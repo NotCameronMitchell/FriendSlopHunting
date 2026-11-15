@@ -68,10 +68,12 @@ namespace FriendSlop.EditorTools
             foreach (var dir in new[] { PrefabDir, SceneDir, MatDir, DataDir }) EnsureFolder(dir);
             Mats.Clear();
             CreateMaterials();
+            NatureArt.Setup();
 
             var catalog = WeaponCatalogBuilder.CreateOrUpdate();
             var pickup = BuildWeaponPickupPrefab(catalog);
-            var player = BuildPlayerPrefab(catalog, pickup);
+            var hunterRig = HunterRigBuilder.Build();
+            var player = BuildPlayerPrefab(catalog, pickup, hunterRig);
             var box = BuildBoxPrefab();
             var animals = AnimalBuilder.BuildAll(name => Mats[name]);
             var gameState = BuildGameStatePrefab(catalog);
@@ -99,7 +101,7 @@ namespace FriendSlop.EditorTools
         {
             var lit = Shader.Find("Universal Render Pipeline/Lit");
             var unlit = Shader.Find("Universal Render Pipeline/Unlit");
-            Mat("Grass", lit, new Color(0.36f, 0.55f, 0.27f));
+            Mat("Grass", lit, new Color(0.42f, 0.58f, 0.24f));
             Mat("Bark", lit, new Color(0.38f, 0.26f, 0.16f));
             Mat("Leaves", lit, new Color(0.18f, 0.42f, 0.2f));
             Mat("Rock", lit, new Color(0.5f, 0.5f, 0.52f));
@@ -169,7 +171,7 @@ namespace FriendSlop.EditorTools
             return SavePrefab(root, $"{PrefabDir}/WeaponPickup.prefab");
         }
 
-        static GameObject BuildPlayerPrefab(WeaponCatalog catalog, GameObject pickupPrefab)
+        static GameObject BuildPlayerPrefab(WeaponCatalog catalog, GameObject pickupPrefab, GameObject hunterRig)
         {
             var root = new GameObject("Player");
 
@@ -186,8 +188,10 @@ namespace FriendSlop.EditorTools
             nt.SyncScaleX = nt.SyncScaleY = nt.SyncScaleZ = false;
             nt.Interpolate = true;
 
-            var body = Visual(PrimitiveType.Capsule, "Body", root.transform, new Vector3(0f, 0.9f, 0f), new Vector3(0.7f, 0.9f, 0.7f));
-            var nose = Visual(PrimitiveType.Cube, "Nose", root.transform, new Vector3(0f, 1.5f, 0.33f), new Vector3(0.25f, 0.15f, 0.25f));
+            // Chunky KayKit hunter; PlayerAppearance switches its parts to the player's outfit.
+            var body = (GameObject)PrefabUtility.InstantiatePrefab(hunterRig, root.transform);
+            body.name = "Hunter";
+            body.transform.localScale = Vector3.one * 0.82f;
 
             var pivot = new GameObject("CameraPivot").transform;
             pivot.SetParent(root.transform, false);
@@ -206,6 +210,10 @@ namespace FriendSlop.EditorTools
             gunHolder.SetParent(pivot, false);
             gunHolder.localPosition = new Vector3(0.24f, -0.24f, 0.45f);
 
+            var hso = new SerializedObject(body.GetComponent<HunterBody>());
+            hso.FindProperty("aimTarget").objectReferenceValue = gunHolder;
+            hso.ApplyModifiedPropertiesWithoutUndo();
+
             var hold = new GameObject("HoldPoint").transform;
             hold.SetParent(pivot, false);
             hold.localPosition = new Vector3(0f, -0.25f, 1.3f);
@@ -216,7 +224,7 @@ namespace FriendSlop.EditorTools
             so.FindProperty("playerCamera").objectReferenceValue = cam;
             so.FindProperty("audioListener").objectReferenceValue = listener;
             so.FindProperty("holdPoint").objectReferenceValue = hold;
-            SetArray(so.FindProperty("bodyRenderers"), body.GetComponent<Renderer>(), nose.GetComponent<Renderer>());
+            so.FindProperty("bodyRenderers").arraySize = 0;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             var weapons = root.AddComponent<PlayerWeapons>();
@@ -229,6 +237,11 @@ namespace FriendSlop.EditorTools
             so.ApplyModifiedPropertiesWithoutUndo();
 
             root.AddComponent<PlayerHealth>();
+            root.AddComponent<PlayerProgress>();
+            var look = root.AddComponent<PlayerAppearance>();
+            var lso = new SerializedObject(look);
+            lso.FindProperty("nameTagMaterial").objectReferenceValue = Mats.TryGetValue("WorldText", out var tagMat) ? tagMat : null;
+            lso.ApplyModifiedPropertiesWithoutUndo();
 
             return SavePrefab(root, $"{PrefabDir}/Player.prefab");
         }
@@ -337,7 +350,7 @@ namespace FriendSlop.EditorTools
             var menuCam = Camera.main;
             if (menuCam != null)
             {
-                menuCam.transform.SetPositionAndRotation(new Vector3(-6f, 9f, -16f), Quaternion.Euler(25f, 25f, 0f));
+                menuCam.transform.SetPositionAndRotation(new Vector3(-3f, 6.5f, -11f), Quaternion.Euler(22f, 22f, 0f));
                 menuCam.clearFlags = CameraClearFlags.Skybox;
             }
 
@@ -359,23 +372,28 @@ namespace FriendSlop.EditorTools
             var rng = new System.Random(1337); // same forest every rebuild
             var trees = new GameObject("Trees").transform;
             trees.SetParent(world, false);
-            for (int i = 0, placed = 0; i < 400 && placed < 90; i++)
+            for (int i = 0, placed = 0; i < 900 && placed < 170; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 6f);
                 if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p)) continue;
-                Tree(trees, p, rng);
+                NatureArt.Tree(trees, p, rng);
                 placed++;
             }
 
             var rocks = new GameObject("Rocks").transform;
             rocks.SetParent(world, false);
-            for (int i = 0, placed = 0; i < 200 && placed < 28; i++)
+            for (int i = 0, placed = 0; i < 300 && placed < 40; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 6f);
                 if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p)) continue;
-                Rock(rocks, p, rng);
+                NatureArt.Rock(rocks, p, rng);
                 placed++;
             }
+
+            var decor = new GameObject("Decor").transform;
+            decor.SetParent(world, false);
+            NatureArt.Decor(decor, rng, MapHalfSize - 3f, p => p.magnitude < CampClearRadius + 1f || NearGunShop(p) || NearTotem(p) || (p - SellZonePos).magnitude < 4f);
+            NatureArt.Grass(world, MapHalfSize - 1f, new[] { new Vector3(0f, 0f, 7f), new Vector3(GunShopPos.x, GunShopPos.z, 6f), new Vector3(SellZonePos.x, SellZonePos.z, 3.5f), new Vector3(TotemPos.x, TotemPos.z, 2.5f) });
 
             // Invisible walls at the map edge.
             var bounds = new GameObject("Bounds").transform;
@@ -422,12 +440,7 @@ namespace FriendSlop.EditorTools
             trader.SetParent(camp, false);
             trader.position = SellZonePos + new Vector3(3.6f, 0f, 0f);
             trader.rotation = Quaternion.LookRotation(-SellZonePos.normalized);
-            var traderBody = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            traderBody.name = "Body";
-            traderBody.transform.SetParent(trader, false);
-            traderBody.transform.localPosition = new Vector3(0f, 1f, 0f);
-            traderBody.GetComponent<Renderer>().sharedMaterial = Mats["Trader"];
-            Visual(PrimitiveType.Cube, "Hat", trader, new Vector3(0f, 2.1f, 0f), new Vector3(0.9f, 0.12f, 0.9f), "Bark");
+            Npc(trader, "outfit_barbarian", "head_barbarian", "bearhat", "none", 7);
 
             var sign = new GameObject("Sign");
             sign.transform.SetParent(camp, false);
@@ -505,6 +518,11 @@ namespace FriendSlop.EditorTools
             hud.AddComponent<ShopMenu>();
             hud.AddComponent<InventoryMenu>();
             hud.AddComponent<OptionsMenu>();
+            hud.AddComponent<FriendSlop.Profile.CustomizeMenu>();
+            var preview = hud.AddComponent<FriendSlop.Profile.CharacterPreview>();
+            var pso = new SerializedObject(preview);
+            pso.FindProperty("hunterPrefab").objectReferenceValue = AssetDatabase.LoadAssetAtPath<GameObject>($"{PrefabDir}/HunterRig.prefab");
+            pso.ApplyModifiedPropertiesWithoutUndo();
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
@@ -535,14 +553,7 @@ namespace FriendSlop.EditorTools
             smith.SetParent(shop, false);
             smith.localPosition = new Vector3(0.6f, 0.2f, 1.9f); // off to one side so the rack stays visible
             smith.localRotation = Quaternion.LookRotation(Vector3.right);
-            var body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            body.name = "Body";
-            body.transform.SetParent(smith, false);
-            body.transform.localPosition = new Vector3(0f, 1f, 0f);
-            body.GetComponent<Renderer>().sharedMaterial = Mats["Gunsmith"];
-            Visual(PrimitiveType.Cube, "Hat", smith, new Vector3(0f, 2.1f, 0f), new Vector3(0.95f, 0.12f, 0.95f), "Gun");
-            Visual(PrimitiveType.Cube, "HatTop", smith, new Vector3(0f, 2.3f, 0f), new Vector3(0.55f, 0.3f, 0.55f), "Gun");
-            Visual(PrimitiveType.Cube, "Beard", smith, new Vector3(0f, 1.35f, 0.42f), new Vector3(0.45f, 0.3f, 0.12f), "Tail");
+            Npc(smith, "outfit_knight", "head_knight", "cowboy", "scarf", 9);
             smith.gameObject.AddComponent<GunShop>();
 
             // Display wall
@@ -605,39 +616,16 @@ namespace FriendSlop.EditorTools
             go.isStatic = true;
         }
 
-        static void Tree(Transform parent, Vector3 pos, System.Random rng)
+        /// <summary>A camp NPC: the hunter rig in a fixed outfit, with a solid body to bump into and aim at.</summary>
+        static void Npc(Transform parent, string outfit, string head, string hat, string acc, int color)
         {
-            float h = 1.8f + (float)rng.NextDouble() * 1.2f;   // trunk half-height
-            var tree = new GameObject("Tree").transform;
-            tree.SetParent(parent, false);
-            tree.position = pos;
-            tree.rotation = Quaternion.Euler(0f, (float)rng.NextDouble() * 360f, 0f);
-
-            var trunk = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            trunk.name = "Trunk";
-            trunk.transform.SetParent(tree, false);
-            trunk.transform.localPosition = new Vector3(0f, h, 0f);
-            trunk.transform.localScale = new Vector3(0.45f, h, 0.45f);
-            trunk.GetComponent<Renderer>().sharedMaterial = Mats["Bark"];
-            trunk.isStatic = true;
-
-            float c = 3f + (float)rng.NextDouble() * 1.8f;
-            var canopy = Visual(PrimitiveType.Sphere, "Canopy", tree, new Vector3(0f, h * 2f + c * 0.3f, 0f), new Vector3(c, c * 1.15f, c), "Leaves");
-            canopy.isStatic = true;
-            tree.gameObject.isStatic = true;
-        }
-
-        static void Rock(Transform parent, Vector3 pos, System.Random rng)
-        {
-            var rock = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            rock.name = "Rock";
-            rock.transform.SetParent(parent, false);
-            var s = new Vector3(1f + (float)rng.NextDouble() * 2f, 0.6f + (float)rng.NextDouble(), 1f + (float)rng.NextDouble() * 2f);
-            rock.transform.localScale = s;
-            rock.transform.position = pos + Vector3.up * (s.y * 0.35f);
-            rock.transform.rotation = Quaternion.Euler((float)rng.NextDouble() * 12f, (float)rng.NextDouble() * 360f, (float)rng.NextDouble() * 12f);
-            rock.GetComponent<Renderer>().sharedMaterial = Mats["Rock"];
-            rock.isStatic = true;
+            var rig = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>($"{PrefabDir}/HunterRig.prefab"), parent);
+            rig.name = "Body";
+            rig.transform.localScale = Vector3.one * 0.9f;
+            var look = parent.gameObject.AddComponent<FriendSlop.Player.NpcLook>();
+            look.outfit = outfit; look.head = head; look.hat = hat; look.accessory = acc; look.colorIndex = color;
+            var col = parent.gameObject.AddComponent<CapsuleCollider>();
+            col.height = 1.9f; col.radius = 0.45f; col.center = new Vector3(0f, 0.95f, 0f);
         }
 
         static Vector3 RandomInMap(System.Random rng, float half) =>

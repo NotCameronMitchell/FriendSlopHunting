@@ -152,8 +152,8 @@ Cameron's MVP priorities, in the agreed build order (**gameplay → mobs → men
 | **M1** | "One Rabbit" slice | Rifle, rabbit AI, carry, sell, shared money, trick shots, juggling | ✅ done (+ sound/juice pass) |
 | **M2a** | **Weapons + shop** | **Pistol is the free starter; ammo is always unlimited.** Trader shop sells the arsenal below with team money. Weapon switching (1–9 / scroll). Every weapon works in multiplayer. | ✅ done (gun shop, inventory, drops) |
 | **M2b** | **Mobs & bosses** | Many more animals (aggressive ones that fight back), plus summonable bosses. Absorbs the old M2 animals and the M3 legendary. | ✅ first pass (8 species + Big Doug) |
-| **M2c** | **Menus** | Main/home menu. **Options:** view and rebind keybinds, volume sliders, push-to-talk toggle, mute/unmute button. **Character customization** with outfits, buyable with in-game money or unlocked by achievements. | |
-| **M2d** | **Art upgrade** | CC0 packs (Quaternius/Kenney): better trees, grass, rocks, and a modular animated character for outfits. Each download needs Cameron's OK. | |
+| **M2c** | **Menus** | Main/home menu. **Options:** view and rebind keybinds, volume sliders, push-to-talk toggle, mute/unmute button. **Character customization** with outfits, buyable with in-game money or unlocked by achievements. | ✅ done (options, rebinds, home screen, 29 cosmetics, 9 achievements) |
+| **M2d** | **Art upgrade** | CC0 packs (Quaternius/Kenney): better trees, grass, rocks, and a modular animated character for outfits. Each download needs Cameron's OK. | ✅ first pass (Quaternius nature, KayKit hunters, PEAK-style animals) |
 | **M3+** | Old M3–M5 | Day/night + spooky nights, proximity voice, save/load, finale. Plus `docs/ideas.md`. | later |
 
 **Weapon roster (M2a).** Ammo is unlimited for everything. Prices are first guesses to tune in playtests.
