@@ -72,6 +72,11 @@ namespace FriendSlop.Net
             GUILayout.Label("Hunt with your friends. Juggle carcasses. Get wrecked by geese.", _wrap);
             GUILayout.Space(10);
 
+            // ---- Lobby rules (apply to hunts you host) ----
+            bool ff = GUILayout.Toggle(FriendSlop.Game.LobbySettings.FriendlyFire, " Friendly fire (when you host)");
+            if (ff != FriendSlop.Game.LobbySettings.FriendlyFire) FriendSlop.Game.LobbySettings.FriendlyFire = ff;
+            GUILayout.Space(8);
+
             // ---- Steam ----
             GUILayout.Label("<b>Steam</b> (AppID 480)", new GUIStyle(GUI.skin.label) { richText = true });
             if (_steam == null)
@@ -96,7 +101,7 @@ namespace FriendSlop.Net
                 foreach (var entry in _steam.Found)
                 {
                     GUILayout.BeginHorizontal();
-                    GUILayout.Label($"{entry.Name}  ({entry.Members}/{entry.MaxMembers})");
+                    GUILayout.Label($"{entry.Name}  ({entry.Members}/{entry.MaxMembers}){(entry.FriendlyFire ? "  · friendly fire" : "")}");
                     GUI.enabled = !_steam.IsBusy;
                     if (GUILayout.Button("Join", GUILayout.Width(60))) _steam.Join(entry.Lobby);
                     GUI.enabled = true;
@@ -135,6 +140,7 @@ namespace FriendSlop.Net
             string role = nm.IsHost ? "Host" : nm.IsServer ? "Server" : "Client";
             GUILayout.Label($"{role} · {_net.Backend} · id {nm.LocalClientId}");
             GUILayout.Label(_net.Status, _wrap);
+            if (FriendSlop.Game.GameState.FriendlyFireOn) GUILayout.Label("Friendly fire: ON");
             if (!nm.IsServer && nm.IsConnectedClient)
             {
                 var transport = nm.NetworkConfig.NetworkTransport;

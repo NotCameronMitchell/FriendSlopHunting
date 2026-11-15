@@ -85,6 +85,43 @@ namespace FriendSlop.EditorTools
                 Move(s, 1.2f, 8f); Fight(s, Temperament.Predator, aggro: 20f, lose: 40f, dmg: 35f, range: 1.8f, cd: 1.6f, knock: 12f, charge: 8f, flee: 0f);
                 Spawn(s, 1, 1, 50f, 75f);
             });
+            // ---- Night critters (only out after dark) ----
+            yield return ("Raccoon", s =>
+            {
+                Id(s, "Raccoon", C(0.47f, 0.47f, 0.5f), C(0.15f, 0.15f, 0.17f), 18, 5f, 10f, 35f, Voice.Squeak, 0.75f);
+                Body(s, BodyStyle.Quadruped, 0.6f, 0.32f, 0.16f, 0.24f); s.hopHeight = 0.03f; s.hopsPerMeter = 1.6f;
+                Move(s, 1.4f, 7f, spook: 8f); Fight(s, Temperament.Territorial, aggro: 4f, lose: 12f, dmg: 6f, range: 0.9f, cd: 1.0f, knock: 3f, charge: 6f, flee: 0.4f);
+                s.nocturnal = true; Spawn(s, 7, 2, 20f, 110f);
+            });
+            yield return ("Opossum", s =>
+            {
+                Id(s, "Opossum", C(0.74f, 0.72f, 0.7f), C(0.95f, 0.66f, 0.7f), 15, 2f, 5f, 25f, Voice.Squeak, 1.25f);
+                Body(s, BodyStyle.Quadruped, 0.55f, 0.28f, 0.13f, 0.22f); s.hopHeight = 0.02f; s.hopsPerMeter = 1.8f;
+                Move(s, 1.2f, 6f, spook: 9f); s.playsDead = true;
+                s.nocturnal = true; Spawn(s, 7, 1, 18f, 100f);
+            });
+            yield return ("Coyote", s =>
+            {
+                Id(s, "Coyote", C(0.66f, 0.52f, 0.34f), C(0.92f, 0.86f, 0.76f), 30, 10f, 20f, 60f, Voice.Growl, 1.4f);
+                Body(s, BodyStyle.Quadruped, 0.9f, 0.42f, 0.45f, 0.26f); s.bigEars = true; s.hopHeight = 0.04f; s.hopsPerMeter = 1f;
+                Move(s, 2f, 10f); Fight(s, Temperament.Predator, aggro: 22f, lose: 40f, dmg: 9f, range: 1.3f, cd: 1.0f, knock: 5f, charge: 10f, flee: 0.3f);
+                s.nocturnal = true; Spawn(s, 8, 3, 50f, 140f);
+            });
+            // ---- Night events (spawned by NightEvents, not by spawners) ----
+            yield return ("GhostGoose", s =>
+            {
+                Id(s, "Ghost Goose", C(0.9f, 0.95f, 1f), C(0.6f, 0.9f, 1f), 120, 4f, 6f, 45f, Voice.Honk, 0.7f);
+                Body(s, BodyStyle.Bird, 0.6f, 0.36f, 0.22f, 0.17f); s.hopHeight = 0f; s.hopsPerMeter = 2.5f;
+                Move(s, 1.6f, 7f); Fight(s, Temperament.Predator, aggro: 45f, lose: 90f, dmg: 7f, range: 1.1f, cd: 1.0f, knock: 6f, charge: 8f, flee: 0f);
+                s.ghostly = true; s.nocturnal = true; Spawn(s, 0, 1, 0f, 0f);
+            });
+            yield return ("ShadowStag", s =>
+            {
+                Id(s, "Shadow Stag", C(0.09f, 0.06f, 0.11f), C(0.25f, 0.1f, 0.3f), 400, 120f, 160f, 160f, Voice.Bellow, 0.6f);
+                Body(s, BodyStyle.Quadruped, 1.5f, 0.62f, 0.9f, 0.34f); s.antlers = true; s.scale = 1.15f; s.hopHeight = 0.05f; s.hopsPerMeter = 0.7f;
+                Move(s, 2.2f, 14f, spook: 40f); s.hearingRadius = 80f;
+                s.shadowy = true; s.nocturnal = true; s.bounty = 600; Spawn(s, 0, 1, 0f, 0f);
+            });
             yield return ("BigDoug", s =>
             {
                 Id(s, "Elk", C(0.55f, 0.38f, 0.22f), C(0.95f, 0.9f, 0.75f), 400, 600f, 800f, 2500f, Voice.Bellow, 0.6f);

@@ -97,6 +97,12 @@ namespace FriendSlop.Player
             else SfxPlayer.PlayAt(Sfx.Thud, position, 0.8f, 0.7f, 2f, 30f);
         }
 
+        /// <summary>Host: push a player without hurting them (explosion blasts, rocket jumps).</summary>
+        public void ServerShove(Vector3 velocity)
+        {
+            if (IsServer && !IsDown.Value) KnockbackRpc(velocity);
+        }
+
         [Rpc(SendTo.Owner)]
         void KnockbackRpc(Vector3 velocity) => _player.AddKnockback(velocity);
 

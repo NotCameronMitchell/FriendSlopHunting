@@ -38,13 +38,31 @@ namespace FriendSlop.Animals
         IEnumerator SpawnLoop()
         {
             // Fill the woods right away, then trickle in replacements.
-            while (AliveCount() < _species.population && TrySpawnGroup()) { }
+            if (Active()) while (AliveCount() < _species.population && TrySpawnGroup()) { }
 
             var wait = new WaitForSeconds(respawnDelay);
             while (IsSpawned)
             {
                 yield return wait;
-                if (AliveCount() < _species.population) TrySpawnGroup();
+                if (!Active()) { SlinkAway(); continue; }
+                // Night critters pour in at dusk instead of trickling.
+                int tries = _species.nocturnal ? 4 : 1;
+                while (tries-- > 0 && AliveCount() < _species.population) TrySpawnGroup();
+            }
+        }
+
+        /// <summary>Nocturnal species are only out at night.</summary>
+        bool Active() => !_species.nocturnal || FriendSlop.World.DayNightCycle.NightNow;
+
+        /// <summary>Dawn: night critters that are still alive (and not being carried) leave.</summary>
+        void SlinkAway()
+        {
+            for (int i = _spawned.Count - 1; i >= 0; i--)
+            {
+                var a = _spawned[i];
+                if (a == null || !a.IsSpawned || a.IsDead.Value || a.Carry.IsHeld) continue;
+                a.NetworkObject.Despawn(true);
+                _spawned.RemoveAt(i);
             }
         }
 

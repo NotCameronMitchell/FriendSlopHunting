@@ -155,9 +155,9 @@ Cameron's MVP priorities, in the agreed build order (**gameplay → mobs → men
 | **M2c** | **Menus** | Main/home menu. **Options:** view and rebind keybinds, volume sliders, push-to-talk toggle, mute/unmute button. **Character customization** with outfits, buyable with in-game money or unlocked by achievements. | ✅ done (options, rebinds, home screen, 29 cosmetics, 9 achievements) |
 | **M2d** | **Art upgrade** | CC0 packs (Quaternius/Kenney): better trees, grass, rocks, and a modular animated character for outfits. Each download needs Cameron's OK. | ✅ first pass (Quaternius nature, KayKit hunters, PEAK-style animals) |
 | **M3a** | **Terrain & big map** | 300 m mountaintop valley ringed by peaks (the border), hills, lake + pond, two streams, painted ground, procedural sky; difficulty rings spread over the bigger map. | ✅ first pass |
-| **M3b** | **Friendly fire toggle** | Host chooses per lobby whether players can shoot each other. | next |
-| **M3c** | **Day / night** | Day–night cycle, spooky nights (scarier mobs), a cabin with beds to sleep through the night. | |
-| **M3d** | **Progression** | Hunter levels, weapon/character upgrades, harder mobs further out (difficulty rings). | |
+| **M3b** | **Friendly fire toggle** | Host chooses per lobby whether players can shoot each other. | ✅ done |
+| **M3c** | **Day / night** | Day–night cycle, spooky nights, a cabin with beds to sleep through the night. Night critters (raccoons, opossums, coyotes); ghost goose nights after every 50 geese; the rare Shadow Stag. | ✅ first pass |
+| **M3d** | **Progression** | Hunter levels, weapon/character upgrades, harder mobs further out (difficulty rings). | next |
 | **M3e** | **Gambling shack** | Roulette, slots and scratchers, paid with animals. | |
 | **M3f** | **Proximity voice** | Voice chat that fades with distance (uses the existing push-to-talk/mute settings). | |
 | **M3g** | **Drivable tank** | The goofy vehicle from the weapon list. | |

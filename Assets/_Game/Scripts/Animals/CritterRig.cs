@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace FriendSlop.Animals
 {
-    public enum Persona { Rabbit, Duck, Goose, Deer, Boar, Wolf, Moose, Bear, Boss }
+    public enum Persona { Rabbit, Duck, Goose, Deer, Boar, Wolf, Moose, Bear, Boss, Raccoon, Opossum, Coyote }
 
     /// <summary>
     /// Gives a procedural animal its personality. Runs locally on every peer from state that is
@@ -41,13 +41,18 @@ namespace FriendSlop.Animals
         public bool grazer;                 // drops its head to eat when nobody's around
         public bool hopper;                 // moves in hops (legs together)
         public bool biped;                  // waddles
+        public bool floaty;                 // hovers and bobs (ghosts)
 
         [Header("Paint")]
         public Renderer[] paintRenderers = System.Array.Empty<Renderer>();
         public Color[] paintColors = System.Array.Empty<Color>();
+        public Color[] paintEmission = System.Array.Empty<Color>();
 
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         static readonly int ColorId = Shader.PropertyToID("_Color");
+        static readonly int EmissionId = Shader.PropertyToID("_EmissionColor");
+
+        bool IsCanine => persona == Persona.Wolf || persona == Persona.Coyote;
 
         Animal _animal;
         Carryable _carry;
@@ -94,6 +99,7 @@ namespace FriendSlop.Animals
                 r.GetPropertyBlock(block);
                 block.SetColor(BaseColorId, paintColors[i]);
                 block.SetColor(ColorId, paintColors[i]);
+                if (i < paintEmission.Length) block.SetColor(EmissionId, paintEmission[i]);
                 r.SetPropertyBlock(block);
             }
         }
@@ -146,7 +152,7 @@ namespace FriendSlop.Animals
         {
             float dt = Mathf.Max(Time.deltaTime, 1e-4f);
             float t = Time.time;
-            bool dead = _animal != null && _animal.IsSpawned && _animal.IsDead.Value;
+            bool dead = _animal != null && _animal.IsSpawned && (_animal.IsDead.Value || _animal.PlayingDead.Value);
             bool angry = !dead && _animal != null && _animal.IsSpawned && _animal.IsAngry.Value;
             bool held = _carry != null && _carry.IsHeld;
 
@@ -204,7 +210,7 @@ namespace FriendSlop.Animals
             {
                 if (_rearT >= 0f) { _rearT += Time.deltaTime; if (_rearT > 1.3f) _rearT = -1f; }
                 posture.localRotation = _postureRest * Quaternion.Euler(PostureAngle() + (fast ? 5f : 0f), 0f, 0f);
-                posture.localPosition = _postureRestPos;
+                posture.localPosition = _postureRestPos + (floaty ? Vector3.up * (0.35f + Mathf.Sin(Time.time * 2.2f) * 0.1f) : Vector3.zero);
             }
             if (!body) return;
             float breathe = 1f + Mathf.Sin(t * (angry ? 6f : 2.4f)) * (angry ? 0.035f : 0.02f);
@@ -268,12 +274,12 @@ namespace FriendSlop.Animals
                 float open = 0f;
                 if (t < _sayUntil) open = 28f * _sayAmount * (0.7f + 0.3f * Mathf.Abs(Mathf.Sin(t * 30f)));
                 else if (persona == Persona.Goose && angry) open = 20f;                         // hiss
-                else if (persona == Persona.Wolf && angry) open = 12f;                          // snarl
-                else if (persona == Persona.Wolf && _moveK > 0.2f) open = 14f + Mathf.Sin(t * 14f) * 4f; // pant
+                else if (IsCanine && angry) open = 12f;                          // snarl
+                else if (IsCanine && _moveK > 0.2f) open = 14f + Mathf.Sin(t * 14f) * 4f; // pant
                 else if (persona == Persona.Moose) open = Mathf.Max(0f, Mathf.Sin(t * 3f)) * 7f; // chew
                 jaw.localRotation = _jawRest * Quaternion.Euler(open, 0f, 0f);
             }
-            if (tongue) tongue.SetActive(persona == Persona.Wolf && !angry && _moveK > 0.2f);
+            if (tongue) tongue.SetActive(IsCanine && !angry && _moveK > 0.2f);
         }
 
         void Ears(float t, bool angry, bool scared)
@@ -300,6 +306,7 @@ namespace FriendSlop.Animals
             switch (persona)
             {
                 case Persona.Wolf:
+                case Persona.Coyote:
                     q = angry ? Quaternion.Euler(-25f, 0f, 0f) : Quaternion.Euler(scared ? 35f : 0f, Mathf.Sin(t * 11f) * (scared ? 5f : 28f), 0f);
                     break;
                 case Persona.Deer:
@@ -394,6 +401,7 @@ namespace FriendSlop.Animals
                     if (head) head.localRotation *= Quaternion.Euler(-Mathf.Sin(k * Mathf.PI) * 18f, 0f, 0f);     // alert head-up
                     break;
                 case Persona.Wolf:
+                case Persona.Coyote:
                     if (head) head.localRotation *= Quaternion.Euler(-Mathf.Sin(k * Mathf.PI) * 35f, 0f, 0f);     // little howl
                     if (jaw) jaw.localRotation = _jawRest * Quaternion.Euler(Mathf.Sin(k * Mathf.PI) * 25f, 0f, 0f);
                     break;

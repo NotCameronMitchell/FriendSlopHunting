@@ -21,6 +21,7 @@ namespace FriendSlop.Weapons
         Transform _owner;
         Action<Animal, Vector3, bool> _onAnimalHit;
         Action<Vector3> _onExplode;
+        Action<FriendSlop.Player.PlayerHealth, Vector3> _onPlayerHit;
         Action _onFinished;
         float _age;
         bool _returning;
@@ -33,7 +34,8 @@ namespace FriendSlop.Weapons
 
         public static Projectile Launch(WeaponDefinition def, Vector3 origin, Vector3 direction, Transform owner,
                                         bool authority, Action<Animal, Vector3, bool> onAnimalHit,
-                                        Action<Vector3> onExplode, Action onFinished)
+                                        Action<Vector3> onExplode, Action onFinished,
+                                        Action<FriendSlop.Player.PlayerHealth, Vector3> onPlayerHit = null)
         {
             var go = new GameObject($"Projectile_{def.displayName}");
             go.transform.position = origin;
@@ -45,6 +47,7 @@ namespace FriendSlop.Weapons
             p._owner = owner;
             p._onAnimalHit = onAnimalHit;
             p._onExplode = onExplode;
+            p._onPlayerHit = onPlayerHit;
             p._onFinished = onFinished;
             p._start = origin;
             p._visual = BuildVisual(def, go.transform);
@@ -123,6 +126,14 @@ namespace FriendSlop.Weapons
                 return true;
             }
 
+            if (hit.collider.TryGetComponent(out FriendSlop.Player.PlayerHealth player))
+            {
+                if (_authority) _onPlayerHit?.Invoke(player, hit.point);
+                if (_def.kind == WeaponKind.Boomerang) { _returning = true; return false; }
+                Finish();
+                return true;
+            }
+
             if (_authority && hit.rigidbody != null && hit.rigidbody.TryGetComponent(out NetworkPhysicsBox box))
             {
                 // Same small upward lift as bullets, so things hop instead of being driven into the dirt.
@@ -169,7 +180,7 @@ namespace FriendSlop.Weapons
             return false;
         }
 
-        static bool IsTarget(Collider c) => c.attachedRigidbody != null || c.GetComponentInParent<Animal>() != null;
+        static bool IsTarget(Collider c) => c.attachedRigidbody != null || c.GetComponentInParent<Animal>() != null || c is CharacterController;
 
         bool IsOwnerCollider(Collider c) => _owner != null && c.transform.IsChildOf(_owner);
 

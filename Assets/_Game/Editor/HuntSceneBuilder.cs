@@ -42,6 +42,8 @@ namespace FriendSlop.EditorTools
         static readonly Vector3 SellZonePos = new Vector3(8f, 0f, 0f);
         static readonly Vector3 GunShopPos = new Vector3(-11f, 0f, -1f);
         static readonly Vector3 TotemPos = new Vector3(0f, 0f, -36f);
+        static readonly Vector3 CabinPos = new Vector3(3f, 0f, 16f);
+        static readonly Vector3 CampfirePos = new Vector3(2.5f, 0f, 5.5f);
 
         static readonly Dictionary<string, Material> Mats = new Dictionary<string, Material>();
 
@@ -76,7 +78,7 @@ namespace FriendSlop.EditorTools
             var player = BuildPlayerPrefab(catalog, pickup, hunterRig);
             var box = BuildBoxPrefab();
             var animals = AnimalBuilder.BuildAll(name => Mats[name]);
-            var gameState = BuildGameStatePrefab(catalog);
+            var gameState = BuildGameStatePrefab(catalog, animals);
             var spawner = BuildSpawnerPrefab();
             GameObject bossPrefab = null;
             foreach (var a in animals) if (a.Species.isBoss) bossPrefab = a.Prefab;
@@ -293,7 +295,7 @@ namespace FriendSlop.EditorTools
 
         // =========================================================== Scene
 
-        static GameObject BuildGameStatePrefab(WeaponCatalog catalog)
+        static GameObject BuildGameStatePrefab(WeaponCatalog catalog, List<AnimalBuilder.Built> animals)
         {
             var go = new GameObject("GameState");
             go.AddComponent<NetworkObject>();
@@ -301,6 +303,17 @@ namespace FriendSlop.EditorTools
             var so = new SerializedObject(state);
             so.FindProperty("catalog").objectReferenceValue = catalog;
             so.ApplyModifiedPropertiesWithoutUndo();
+
+            // Shared clock + night happenings (ghost goose nights, the Shadow Stag).
+            go.AddComponent<DayNightCycle>();
+            var events = go.AddComponent<NightEvents>();
+            var eso = new SerializedObject(events);
+            foreach (var a in animals)
+            {
+                if (a.Species.ghostly) eso.FindProperty("ghostGoosePrefab").objectReferenceValue = a.Prefab;
+                if (a.Species.shadowy) eso.FindProperty("shadowStagPrefab").objectReferenceValue = a.Prefab;
+            }
+            eso.ApplyModifiedPropertiesWithoutUndo();
             return SavePrefab(go, $"{PrefabDir}/GameState.prefab");
         }
 
@@ -376,7 +389,7 @@ namespace FriendSlop.EditorTools
             for (int i = 0, placed = 0; i < 4000 && placed < 520; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
-                if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p) || !Wild(p, 3f, 30f)) continue;
+                if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p) || NearCabin(p) || !Wild(p, 3f, 30f)) continue;
                 p.y = GroundY(p);
                 if (p.y > 22f) continue; // bare peaks
                 NatureArt.Tree(trees, p, rng);
@@ -388,7 +401,7 @@ namespace FriendSlop.EditorTools
             for (int i = 0, placed = 0; i < 1200 && placed < 130; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
-                if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p) || (p - SellZonePos).magnitude < 9f || !Wild(p, 1.5f, 45f)) continue;
+                if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || (p - SellZonePos).magnitude < 9f || !Wild(p, 1.5f, 45f)) continue;
                 p.y = GroundY(p) - 0.25f;
                 NatureArt.Rock(rocks, p, rng);
                 placed++;
@@ -397,9 +410,9 @@ namespace FriendSlop.EditorTools
             var decor = new GameObject("Decor").transform;
             decor.SetParent(world, false);
             NatureArt.Decor(decor, rng, MapHalfSize - 3f, 1500,
-                p => p.magnitude < CampClearRadius + 1f || NearGunShop(p) || NearTotem(p) || (p - SellZonePos).magnitude < 4f || !Wild(p, 0.8f, 32f),
+                p => p.magnitude < CampClearRadius + 1f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || (p - SellZonePos).magnitude < 4f || !Wild(p, 0.8f, 32f),
                 GroundY);
-            NatureArt.Grass(world, MapHalfSize - 1f, new[] { new Vector3(0f, 0f, 7f), new Vector3(GunShopPos.x, GunShopPos.z, 6f), new Vector3(SellZonePos.x, SellZonePos.z, 3.5f), new Vector3(TotemPos.x, TotemPos.z, 2.5f) });
+            NatureArt.Grass(world, MapHalfSize - 1f, new[] { new Vector3(0f, 0f, 7f), new Vector3(GunShopPos.x, GunShopPos.z, 6f), new Vector3(SellZonePos.x, SellZonePos.z, 3.5f), new Vector3(TotemPos.x, TotemPos.z, 2.5f), new Vector3(CabinPos.x, CabinPos.z, 7f), new Vector3(CampfirePos.x, CampfirePos.z, 2.5f) });
 
             // Invisible walls at the map edge (behind the mountains).
             var bounds = new GameObject("Bounds").transform;
@@ -417,6 +430,25 @@ namespace FriendSlop.EditorTools
             }
 
             BuildGunShop(world, catalog);
+            var lantern = BuildCabin(world);
+            var campfire = BuildCampfire(world);
+
+            // Day/night lighting rides on the scene's sun.
+            Light sunLight = null;
+            foreach (var l in Object.FindObjectsByType<Light>(FindObjectsSortMode.None)) if (l.type == LightType.Directional) { sunLight = l; break; }
+            if (sunLight != null)
+            {
+                sunLight.name = "Sun";
+                sunLight.shadows = LightShadows.Soft;
+                var visuals = sunLight.gameObject.AddComponent<DayNightVisuals>();
+                var vso = new SerializedObject(visuals);
+                vso.FindProperty("sun").objectReferenceValue = sunLight;
+                vso.FindProperty("skybox").objectReferenceValue = RenderSettings.skybox;
+                vso.FindProperty("starShader").objectReferenceValue = Shader.Find("FriendSlop/Stars");
+                SetArray(vso.FindProperty("nightLights"), campfire, lantern);
+                vso.ApplyModifiedPropertiesWithoutUndo();
+            }
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
 
             // ---------- NavMesh (bake now, from physics colliders of the static world) ----------
             var navGo = new GameObject("NavMesh");
@@ -606,6 +638,8 @@ namespace FriendSlop.EditorTools
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
+        static bool NearCabin(Vector3 p) => (new Vector3(p.x, 0f, p.z) - CabinPos).magnitude < 9f;
+
         static bool NearTotem(Vector3 p) => (new Vector3(p.x, 0f, p.z) - TotemPos).magnitude < 6f;
 
         static bool NearGunShop(Vector3 p) =>
@@ -636,6 +670,124 @@ namespace FriendSlop.EditorTools
 
         static Vector3 RandomInMap(System.Random rng, float half) =>
             new Vector3(((float)rng.NextDouble() * 2f - 1f) * half, 0f, ((float)rng.NextDouble() * 2f - 1f) * half);
+
+        // =========================================================== Cabin & campfire
+
+        /// <summary>A log cabin north of camp with four beds and a lantern. Sleep here to skip the night.</summary>
+        static Light BuildCabin(Transform world)
+        {
+            var cabin = new GameObject("Cabin").transform;
+            cabin.SetParent(world, false);
+            cabin.position = CabinPos;
+            cabin.rotation = Quaternion.LookRotation(-CabinPos.normalized); // door faces camp
+
+            const float W = 8f, D = 6f, H = 2.8f, T = 0.22f;
+            Solid(cabin, "Floor", new Vector3(0f, 0.05f, 0f), new Vector3(W, 0.1f, D), "Plank");
+            Solid(cabin, "Back", new Vector3(0f, H / 2f, -D / 2f), new Vector3(W, H, T), "Bark");
+            Solid(cabin, "Left", new Vector3(-W / 2f, H / 2f, 0f), new Vector3(T, H, D), "Bark");
+            Solid(cabin, "Right", new Vector3(W / 2f, H / 2f, 0f), new Vector3(T, H, D), "Bark");
+            const float door = 1.6f;
+            float side = (W - door) / 2f;
+            Solid(cabin, "FrontL", new Vector3(-(door / 2f + side / 2f), H / 2f, D / 2f), new Vector3(side, H, T), "Bark");
+            Solid(cabin, "FrontR", new Vector3(door / 2f + side / 2f, H / 2f, D / 2f), new Vector3(side, H, T), "Bark");
+            Solid(cabin, "Lintel", new Vector3(0f, H - 0.3f, D / 2f), new Vector3(door, 0.6f, T), "Bark");
+            // Log stripes so the walls read as a log cabin.
+            for (int i = 1; i < 6; i++)
+            {
+                float y = i * H / 6f;
+                Visual(PrimitiveType.Cube, "Log", cabin, new Vector3(0f, y, -D / 2f - 0.12f), new Vector3(W + 0.3f, 0.06f, 0.06f), "Plank");
+                Visual(PrimitiveType.Cube, "Log", cabin, new Vector3(-W / 2f - 0.12f, y, 0f), new Vector3(0.06f, 0.06f, D + 0.3f), "Plank");
+                Visual(PrimitiveType.Cube, "Log", cabin, new Vector3(W / 2f + 0.12f, y, 0f), new Vector3(0.06f, 0.06f, D + 0.3f), "Plank");
+            }
+            // Gable roof
+            float half = W / 2f + 0.5f;
+            float slope = Mathf.Atan2(1.4f, half) * Mathf.Rad2Deg;
+            float len = Mathf.Sqrt(half * half + 1.4f * 1.4f);
+            for (int s = -1; s <= 1; s += 2)
+            {
+                var roof = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                roof.name = "Roof";
+                roof.transform.SetParent(cabin, false);
+                roof.transform.localPosition = new Vector3(s * half / 2f, H + 0.7f, 0f);
+                roof.transform.localRotation = Quaternion.Euler(0f, 0f, -s * slope);
+                roof.transform.localScale = new Vector3(len, 0.15f, D + 1f);
+                roof.GetComponent<Renderer>().sharedMaterial = Mats["Roof"];
+                roof.isStatic = true;
+            }
+            for (int s = -1; s <= 1; s += 2) // gable ends (a squat block under each roof edge)
+                Visual(PrimitiveType.Cube, "Gable", cabin, new Vector3(0f, H + 0.55f, s * (D / 2f)), new Vector3(W * 0.62f, 1.1f, T), "Bark");
+
+            // Beds along the back wall
+            float[] xs = { -2.7f, -0.9f, 0.9f, 2.7f };
+            var blankets = new[] { new Color(0.75f, 0.2f, 0.2f), new Color(0.2f, 0.45f, 0.75f), new Color(0.3f, 0.6f, 0.3f), new Color(0.85f, 0.65f, 0.2f) };
+            for (int i = 0; i < xs.Length; i++)
+            {
+                var bed = new GameObject($"Bed{i}");
+                bed.transform.SetParent(cabin, false);
+                bed.transform.localPosition = new Vector3(xs[i], 0f, -D / 2f + 1.15f);
+                var col = bed.AddComponent<BoxCollider>();
+                col.size = new Vector3(1.1f, 0.6f, 2.0f);
+                col.center = new Vector3(0f, 0.3f, 0f);
+                Visual(PrimitiveType.Cube, "Frame", bed.transform, new Vector3(0f, 0.22f, 0f), new Vector3(1.1f, 0.28f, 2.05f), "Plank");
+                Visual(PrimitiveType.Cube, "Mattress", bed.transform, new Vector3(0f, 0.43f, 0.05f), new Vector3(0.95f, 0.16f, 1.85f), "Tail");
+                Visual(PrimitiveType.Cube, "Pillow", bed.transform, new Vector3(0f, 0.56f, -0.72f), new Vector3(0.7f, 0.12f, 0.32f), "Tail");
+                var blanket = Visual(PrimitiveType.Cube, "Blanket", bed.transform, new Vector3(0f, 0.53f, 0.3f), new Vector3(1.0f, 0.06f, 1.3f));
+                string bmPath = $"{MatDir}/Blanket{i}.mat";
+                var bm = AssetDatabase.LoadAssetAtPath<Material>(bmPath);
+                if (bm == null) { bm = new Material(Mats["Plank"]); AssetDatabase.CreateAsset(bm, bmPath); }
+                bm.SetColor("_BaseColor", blankets[i]); bm.color = blankets[i];
+                blanket.GetComponent<Renderer>().sharedMaterial = bm;
+                Visual(PrimitiveType.Cube, "Headboard", bed.transform, new Vector3(0f, 0.6f, -1.0f), new Vector3(1.1f, 0.8f, 0.08f), "Plank");
+                var sleep = new GameObject("SleepPoint").transform;
+                sleep.SetParent(bed.transform, false);
+                sleep.localPosition = new Vector3(0f, 0.55f, 0.1f);
+                sleep.localRotation = Quaternion.identity; // facing the foot of the bed
+                bed.AddComponent<Bed>().sleepPoint = sleep;
+            }
+
+            // Lantern hanging from the ridge
+            var lanternGo = new GameObject("Lantern");
+            lanternGo.transform.SetParent(cabin, false);
+            lanternGo.transform.localPosition = new Vector3(0f, H - 0.2f, 0.2f);
+            Visual(PrimitiveType.Cube, "LanternBody", lanternGo.transform, Vector3.zero, new Vector3(0.18f, 0.25f, 0.18f), "Glow");
+            var lantern = lanternGo.AddComponent<Light>();
+            lantern.type = LightType.Point;
+            lantern.color = new Color(1f, 0.72f, 0.4f);
+            lantern.range = 9f;
+            lantern.intensity = 2.2f;
+            lantern.shadows = LightShadows.None;
+            return lantern;
+        }
+
+        /// <summary>Camp's campfire: logs, a stone ring and a flickering warm light that matters at night.</summary>
+        static Light BuildCampfire(Transform world)
+        {
+            var fire = new GameObject("Campfire").transform;
+            fire.SetParent(world, false);
+            fire.position = CampfirePos;
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * Mathf.PI / 4f;
+                Visual(PrimitiveType.Sphere, "Stone", fire, new Vector3(Mathf.Cos(a) * 0.75f, 0.1f, Mathf.Sin(a) * 0.75f), new Vector3(0.32f, 0.22f, 0.32f), "Stone");
+            }
+            for (int i = 0; i < 3; i++)
+                Visual(PrimitiveType.Cylinder, "Log", fire, new Vector3(0f, 0.15f, 0f), new Vector3(0.14f, 0.45f, 0.14f), "Bark")
+                    .transform.localRotation = Quaternion.Euler(70f, i * 60f, 0f);
+            Visual(PrimitiveType.Sphere, "Flame", fire, new Vector3(0f, 0.35f, 0f), new Vector3(0.45f, 0.6f, 0.45f), "Glow");
+            Visual(PrimitiveType.Sphere, "Flame2", fire, new Vector3(0.05f, 0.62f, 0.02f), new Vector3(0.25f, 0.4f, 0.25f), "Glow");
+            var col = fire.gameObject.AddComponent<CapsuleCollider>();
+            col.radius = 0.8f; col.height = 0.6f; col.center = new Vector3(0f, 0.3f, 0f);
+            var lightGo = new GameObject("FireLight");
+            lightGo.transform.SetParent(fire, false);
+            lightGo.transform.localPosition = new Vector3(0f, 0.9f, 0f);
+            var light = lightGo.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(1f, 0.55f, 0.25f);
+            light.range = 16f;
+            light.intensity = 3.2f;
+            light.shadows = LightShadows.None; // point shadows cost 6 shadow maps; not worth it
+            return light;
+        }
 
         // =========================================================== Helpers
 

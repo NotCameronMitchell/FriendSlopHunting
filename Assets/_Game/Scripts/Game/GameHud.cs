@@ -117,6 +117,7 @@ namespace FriendSlop.Game
             Shadowed(new Rect(Screen.width - 420, 12, 400, 50), $"${state.Money.Value:N0}", _money);
             GUI.color = prevColor;
             Shadowed(new Rect(Screen.width - 320, 56, 300, 24), $"{state.AnimalsSold.Value} sold", _hint);
+            DrawClock(prevColor);
 
             float g = (Time.unscaledTime - _punchStart) / 1.4f;
             if (g >= 0f && g < 1f)
@@ -136,6 +137,7 @@ namespace FriendSlop.Game
 
             DrawWeaponBar();
             DrawSurvival();
+            DrawSleep();
 
             // Hit marker over the crosshair.
             if (Time.unscaledTime < _hitMarkerUntil)
@@ -161,6 +163,56 @@ namespace FriendSlop.Game
             string hint = NetworkPlayer.LocalHint;
             if (!string.IsNullOrEmpty(hint))
                 Shadowed(new Rect(Screen.width / 2f - 400, Screen.height - 120, 800, 30), hint, _hint);
+        }
+
+        GUIStyle _clock, _zzz;
+
+        /// <summary>Day number + clock, a moon at night, and the goose countdown when the flock is close to haunting you.</summary>
+        void DrawClock(Color prevColor)
+        {
+            var cycle = FriendSlop.World.DayNightCycle.Instance;
+            if (cycle == null || !cycle.IsSpawned) return;
+            _clock ??= new GUIStyle(GUI.skin.label) { fontSize = 16, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperRight };
+            bool night = cycle.IsNight;
+            GUI.color = night ? new Color(0.7f, 0.78f, 1f) : new Color(1f, 0.95f, 0.75f);
+            Shadowed(new Rect(Screen.width - 420, 82, 400, 24), $"{(night ? "Night" : "Day")} {cycle.Day}  ·  {cycle.ClockText}", _clock);
+            GUI.color = prevColor;
+
+            var ev = NightEvents.Instance;
+            if (ev == null || !ev.IsSpawned) return;
+            if (ev.GhostNight.Value)
+            {
+                GUI.color = new Color(0.55f, 1f, 1f);
+                Shadowed(new Rect(Screen.width - 420, 104, 400, 24), "GHOST GOOSE NIGHT", _clock);
+            }
+            else
+            {
+                int left = ev.GeesePerHaunting - ev.GeeseKilled.Value % ev.GeesePerHaunting;
+                if (left <= 10 && ev.GeeseKilled.Value > 0)
+                {
+                    GUI.color = new Color(0.8f, 0.9f, 1f, 0.85f);
+                    Shadowed(new Rect(Screen.width - 420, 104, 400, 24), $"The flock is watching... ({left} more geese)", _clock);
+                }
+            }
+            GUI.color = prevColor;
+        }
+
+        /// <summary>Eyes closed while sleeping, with how many hunters are in bed.</summary>
+        void DrawSleep()
+        {
+            var me = NetworkPlayer.Local;
+            if (me == null || !me.Sleeping.Value) return;
+            int asleep = 0, total = 0;
+            foreach (var p in NetworkPlayer.All) { if (p == null || !p.IsSpawned) continue; total++; if (p.Sleeping.Value) asleep++; }
+            _white ??= Texture2D.whiteTexture;
+            var prev = GUI.color;
+            GUI.color = new Color(0f, 0f, 0.02f, 0.82f);
+            GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _white);
+            GUI.color = prev;
+            _zzz ??= new GUIStyle(GUI.skin.label) { fontSize = 44, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
+            Shadowed(new Rect(0, Screen.height / 2f - 60, Screen.width, 60), "Z z z . . .", _zzz);
+            Shadowed(new Rect(0, Screen.height / 2f + 10, Screen.width, 30),
+                asleep >= total ? "Everyone's asleep. Sleeping through the night..." : $"{asleep}/{total} hunters in bed. Everyone has to sleep to skip the night.", _hint);
         }
 
         GUIStyle _big, _small;

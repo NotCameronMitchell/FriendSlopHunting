@@ -26,6 +26,15 @@ namespace FriendSlop.Player
         /// <summary>The local player's camera (name tags face it). Null outside a hunt.</summary>
         public static Transform LocalCamera { get; private set; }
 
+        /// <summary>Every spawned player (all peers), and the local one.</summary>
+        public static readonly System.Collections.Generic.List<NetworkPlayer> All = new();
+        public static NetworkPlayer Local { get; private set; }
+
+        /// <summary>In a cabin bed. When every hunter is asleep at night, the host skips to morning.</summary>
+        public readonly NetworkVariable<bool> Sleeping = new NetworkVariable<bool>(false,
+            NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+        FriendSlop.World.Bed _bed;
+
         /// <summary>Tint the body (from the player's chosen color).</summary>
         public void SetBodyColor(Color color)
         {
@@ -141,6 +150,8 @@ namespace FriendSlop.Player
 
         public override void OnNetworkSpawn()
         {
+            All.Add(this);
+            Sleeping.OnValueChanged += OnSleepingChanged;
             ApplyPlayerColor();
             _lastStepPos = transform.position;
 
@@ -150,6 +161,7 @@ namespace FriendSlop.Player
 
             if (!mine) return;
             LocalCamera = playerCamera ? playerCamera.transform : transform;
+            Local = this;
 
             // Hide our own body from our camera but keep its shadow.
             foreach (var r in bodyRenderers)
@@ -173,12 +185,52 @@ namespace FriendSlop.Player
 
         public override void OnNetworkDespawn()
         {
+            All.Remove(this);
+            Sleeping.OnValueChanged -= OnSleepingChanged;
+            if (Local == this) Local = null;
             if (!IsOwner) return;
             if (_menuCamera) _menuCamera.SetActive(true);
             LocalCamera = null;
             LocalHint = string.Empty;
             SetCursorLocked(false);
         }
+
+        // ------------------------------ Sleeping ------------------------------
+
+        void GoToSleep(FriendSlop.World.Bed bed)
+        {
+            if (_held != null) Release(Vector3.zero);
+            _bed = bed;
+            _cc.enabled = false;
+            transform.SetPositionAndRotation(bed.SleepPosition, bed.SleepRotation);
+            _pitch = -70f; // staring at the rafters
+            if (cameraPivot) { cameraPivot.localPosition = new Vector3(0f, 0.35f, 0.3f); cameraPivot.localRotation = Quaternion.Euler(_pitch, 0f, 0f); }
+            Sleeping.Value = true;
+        }
+
+        void WakeUp()
+        {
+            if (!Sleeping.Value) return;
+            Sleeping.Value = false;
+            Vector3 standAt = _bed ? _bed.transform.position + _bed.transform.right * 1.1f : transform.position;
+            transform.position = standAt + Vector3.up * 0.1f;
+            _pitch = 0f;
+            if (cameraPivot) cameraPivot.localPosition = _pivotRestPos;
+            _cc.enabled = true;
+            _bed = null;
+        }
+
+        void OnSleepingChanged(bool previous, bool sleeping)
+        {
+            var hunter = GetComponentInChildren<HunterBody>();
+            if (hunter != null) hunter.SetDown(sleeping || IsDown); // lie flat in bed
+        }
+
+        /// <summary>Host: morning came; get this player out of bed.</summary>
+        public void ServerWake() { if (IsServer) WakeUpRpc(); }
+
+        [Rpc(SendTo.Owner)]
+        void WakeUpRpc() => WakeUp();
 
         /// <summary>Kick the camera up; it settles back on its own. Owner only.</summary>
         public void AddRecoil(float degrees) => _recoil += degrees;
@@ -199,6 +251,15 @@ namespace FriendSlop.Player
             }
 
             if (Controls.Pressed(GameAction.ToggleMute)) GameSettings.MicMuted = !GameSettings.MicMuted;
+
+            if (Sleeping.Value)
+            {
+                LocalHint = "Sleeping. Press E, Space or move to get up.";
+                if (Controls.Pressed(GameAction.Interact) || Controls.Pressed(GameAction.Jump) || Controls.Pressed(GameAction.MoveForward)
+                    || Controls.Pressed(GameAction.MoveBack) || Controls.Pressed(GameAction.MoveLeft) || Controls.Pressed(GameAction.MoveRight))
+                    WakeUp();
+                return;
+            }
 
             if (GameMenus.AnyOpen)
             {
@@ -372,6 +433,12 @@ namespace FriendSlop.Player
                     bool have = TryGetComponent(out PlayerWeapons pw) && pw.Owns(pickup.WeaponIndex.Value);
                     LocalHint = have ? $"You already have a {pickup.Definition.displayName}" : $"E pick up {pickup.Definition.displayName}";
                     if (!have && controlling && Controls.Pressed(GameAction.Interact)) pickup.RequestPickup();
+                }
+                else if (LookAt<FriendSlop.World.Bed>(FriendSlop.World.Bed.InteractRange) is FriendSlop.World.Bed bed)
+                {
+                    bool night = FriendSlop.World.DayNightCycle.NightNow;
+                    LocalHint = night ? "E sleep (everyone sleeping skips the night)" : "Beds are for nights. Come back after dark.";
+                    if (night && controlling && Controls.Pressed(GameAction.Interact)) GoToSleep(bed);
                 }
                 else if (LookAt<GunShop>(GunShop.InteractRange) != null)
                 {

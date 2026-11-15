@@ -55,6 +55,74 @@ namespace FriendSlop.EditorTools
 
         static void Run(string cmd)
         {
+            if (cmd.StartsWith("time "))
+            {
+                // time 0.85 : jump the shared clock (0 midnight, 0.25 dawn, 0.5 noon, 0.75 dusk).
+                var cycle = FriendSlop.World.DayNightCycle.Instance;
+                float t = float.Parse(cmd.Substring(5), System.Globalization.CultureInfo.InvariantCulture);
+                if (cycle == null || !cycle.IsServer) { Debug.LogWarning("[Bridge] time: host first"); return; }
+                cycle.ServerSetTime(t);
+                Debug.Log($"[Bridge] time → {cycle.ClockText} day {cycle.Day} night={cycle.IsNight}");
+                return;
+            }
+            if (cmd.StartsWith("lookat "))
+            {
+                // lookat Ghost Goose : stand a few meters in front of the first live animal with that name.
+                string want = cmd.Substring(7).Trim();
+                var hp = FriendSlop.Player.PlayerHealth.Local;
+                Animal found = null;
+                foreach (var a in Animal.All) if (string.Equals(a.Species.displayName, want, System.StringComparison.OrdinalIgnoreCase) && !a.IsDead.Value) { found = a; break; }
+                if (hp == null || found == null) { Debug.LogWarning($"[Bridge] lookat: no {want}"); return; }
+                var t = found.transform;
+                float dist = 2.5f + found.Species.bodyLength * found.Species.scale * 1.6f;
+                var at = t.position + t.forward * dist;
+                at.y = FriendSlop.World.Ground.HeightAt(at) + 0.3f;
+                var agent = found.GetComponent<UnityEngine.AI.NavMeshAgent>();
+                if (agent && agent.enabled) agent.isStopped = true;
+                var np = hp.GetComponent<FriendSlop.Player.NetworkPlayer>();
+                np.Teleport(at);
+                var flat = t.position - at; flat.y = 0f;
+                np.transform.rotation = Quaternion.LookRotation(flat);
+                Debug.Log($"[Bridge] looking at {want} from {dist:0.0} m");
+                return;
+            }
+            if (cmd == "selftest-mpb")
+            {
+                foreach (var a in Animal.All)
+                {
+                    if (!a.Species.shadowy) continue;
+                    foreach (var r in a.GetComponentsInChildren<Renderer>())
+                    {
+                        if (r.name != "Pupil") continue;
+                        var b = new MaterialPropertyBlock(); r.GetPropertyBlock(b);
+                        Debug.Log($"[Bridge] mpb {r.name} mat={r.sharedMaterial.name} shader={r.sharedMaterial.shader.name} kw={r.sharedMaterial.IsKeywordEnabled("_EMISSION")} emis={b.GetColor("_EmissionColor")} base={b.GetColor("_BaseColor")} hasProp={r.sharedMaterial.HasProperty("_EmissionColor")}");
+                        var asset = AssetDatabase.LoadAssetAtPath<Material>("Assets/_Game/Materials/Animal.mat");
+                        Debug.Log($"[Bridge] mpb asset same={asset == r.sharedMaterial} assetKw={asset.IsKeywordEnabled("_EMISSION")} enabledKw=[{string.Join(",", r.sharedMaterial.shaderKeywords)}] localKw=[{string.Join(",", System.Linq.Enumerable.Select(r.sharedMaterial.enabledKeywords, k => k.name))}]");
+                    }
+                    break;
+                }
+                return;
+            }
+            if (cmd == "selftest-haunt") { FriendSlop.Game.NightEvents.Instance?.ServerDebugHaunt(); Debug.Log("[Bridge] haunting queued"); return; }
+            if (cmd == "selftest-stag") { FriendSlop.Game.NightEvents.Instance?.ServerDebugStag(); Debug.Log("[Bridge] shadow stag spawned"); return; }
+            if (cmd == "selftest-sleep")
+            {
+                var me = FriendSlop.Player.NetworkPlayer.Local;
+                var bed = FriendSlop.World.Bed.All.Count > 0 ? FriendSlop.World.Bed.All[0] : null;
+                if (me == null || bed == null) { Debug.LogWarning("[Bridge] selftest-sleep: no player/bed"); return; }
+                me.GetType().GetMethod("GoToSleep", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(me, new object[] { bed });
+                Debug.Log("[Bridge] sleeping");
+                return;
+            }
+            if (cmd == "selftest-night")
+            {
+                var cycle = FriendSlop.World.DayNightCycle.Instance;
+                var ev = FriendSlop.Game.NightEvents.Instance;
+                int night = 0, ghosts = 0, stags = 0;
+                foreach (var a in Animal.All) { if (a.Species.nocturnal && !a.IsDead.Value) night++; if (a.Species.ghostly) ghosts++; if (a.Species.shadowy) stags++; }
+                Debug.Log($"[Bridge] night → {cycle?.ClockText} day {cycle?.Day} isNight={cycle?.IsNight} nightCritters={night} ghosts={ghosts} stags={stags} ghostNight={ev?.GhostNight.Value} geese={ev?.GeeseKilled.Value} sleeping={FriendSlop.Player.NetworkPlayer.Local?.Sleeping.Value}");
+                return;
+            }
             if (cmd.StartsWith("tp "))
             {
                 // tp x z yaw : stand on the ground at (x, z) facing yaw degrees.

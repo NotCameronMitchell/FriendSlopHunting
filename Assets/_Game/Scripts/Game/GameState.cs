@@ -19,6 +19,16 @@ namespace FriendSlop.Game
         /// <summary>Total animals sold this session (for fun stats later).</summary>
         public readonly NetworkVariable<int> AnimalsSold = new NetworkVariable<int>(0);
 
+        /// <summary>Lobby rule chosen by the host when hosting: can players hurt each other?</summary>
+        public readonly NetworkVariable<bool> FriendlyFire = new NetworkVariable<bool>(false);
+
+        public static bool FriendlyFireOn => Instance != null && Instance.IsSpawned && Instance.FriendlyFire.Value;
+
+        public override void OnNetworkSpawn()
+        {
+            if (IsServer) FriendlyFire.Value = LobbySettings.FriendlyFire;
+        }
+
         /// <summary>Raised locally on every peer when the host announces something.</summary>
         public static event Action<string> Announced;
 

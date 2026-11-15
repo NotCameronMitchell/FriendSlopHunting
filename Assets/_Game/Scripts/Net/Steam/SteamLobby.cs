@@ -32,6 +32,7 @@ namespace FriendSlop.Net.Steam
             public string Name;
             public int Members;
             public int MaxMembers;
+            public bool FriendlyFire;
         }
 
         public Lobby? Current { get; private set; }
@@ -82,6 +83,7 @@ namespace FriendSlop.Net.Steam
                 lobby.SetData(VersionKey, ProtocolVersion);
                 lobby.SetData(NameKey, $"{SteamService.PersonaName}'s hunt");
                 lobby.SetData(HostKey, SteamService.LocalSteamId.ToString());
+                lobby.SetData("fsh_ff", FriendSlop.Game.LobbySettings.FriendlyFire ? "1" : "0");
                 Current = lobby;
                 _net.ReportStatus($"Hosting on Steam as {SteamService.PersonaName}");
             }
@@ -133,6 +135,7 @@ namespace FriendSlop.Net.Steam
                             Name = string.IsNullOrEmpty(l.GetData(NameKey)) ? "Unnamed hunt" : l.GetData(NameKey),
                             Members = l.MemberCount,
                             MaxMembers = l.MaxMembers,
+                            FriendlyFire = l.GetData("fsh_ff") == "1",
                         });
                     }
                 }

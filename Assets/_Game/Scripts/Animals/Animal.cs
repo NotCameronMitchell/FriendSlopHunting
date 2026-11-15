@@ -42,6 +42,8 @@ namespace FriendSlop.Animals
         public readonly NetworkVariable<float> HealthFraction = new NetworkVariable<float>(1f);
         /// <summary>True while hunting/charging someone (for HUD/sounds on clients).</summary>
         public readonly NetworkVariable<bool> IsAngry = new NetworkVariable<bool>(false);
+        /// <summary>Opossum trick: lying "dead" for a few seconds (shows the dead face, then bolts).</summary>
+        public readonly NetworkVariable<bool> PlayingDead = new NetworkVariable<bool>(false);
 
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         static readonly int ColorId = Shader.PropertyToID("_Color");
@@ -64,6 +66,7 @@ namespace FriendSlop.Animals
         float _nextAttack;
         float _nextVoice;
         float _deathTime;
+        float _playDeadUntil, _nextPlayDead;
 
         // Visual state (all peers)
         Vector3 _lastPos;
@@ -191,6 +194,13 @@ namespace FriendSlop.Animals
 
         void ServerThink()
         {
+            if (PlayingDead.Value)
+            {
+                if (Time.time < _playDeadUntil) return;
+                PlayingDead.Value = false;
+                if (_agent.enabled && _agent.isOnNavMesh) _agent.isStopped = false;
+                _nextThink = 0f;
+            }
             if (!_agent.enabled || !_agent.isOnNavMesh) return;
 
             if (Time.time >= _nextVoice)
@@ -225,6 +235,7 @@ namespace FriendSlop.Animals
 
             float radius = species.aggroRadius;
             if (radius <= 0f) return;
+            if (FriendSlop.World.DayNightCycle.NightNow) radius *= 1.35f; // bolder in the dark
             var victim = NearestPlayer(radius);
             if (victim != null) StartChase(victim, alertPack: true);
         }
@@ -396,6 +407,14 @@ namespace FriendSlop.Animals
 
         void Panic(Vector3 from, float seconds)
         {
+            if (species.playsDead && !PlayingDead.Value && Time.time > _nextPlayDead && Random.value < 0.6f)
+            {
+                // Flop over. The panic still applies once it gets back up.
+                PlayingDead.Value = true;
+                _playDeadUntil = Time.time + Random.Range(3f, 5f);
+                _nextPlayDead = _playDeadUntil + 6f;
+                if (_agent.enabled && _agent.isOnNavMesh) _agent.isStopped = true;
+            }
             _panicFrom = from;
             _panicUntil = Time.time + seconds;
             _nextThink = 0f;
@@ -464,12 +483,21 @@ namespace FriendSlop.Animals
 
             _carry.ServerSetCarryable(true);
 
+            PlayingDead.Value = false;
             PlayerProgress.Of(shooterId)?.ServerCreditKill(species, style); // stats + achievements for the killer
             string who = GameState.PlayerName(shooterId);
+            FriendSlop.Game.NightEvents.Instance?.ServerOnKill(this, shooterId);
             if (species.isBoss)
             {
                 GameState.Instance?.ServerGrantMoney(species.bounty);
                 GameState.Instance?.ServerAnnounce($"LEGENDARY! {who} took down {species.bossTitle}! Bounty +${species.bounty:N0}");
+                return;
+            }
+
+            if (species.bounty > 0)
+            {
+                GameState.Instance?.ServerGrantMoney(species.bounty);
+                GameState.Instance?.ServerAnnounce($"{who} bagged {(species.shadowy ? "the" : "a")} {species.displayName}! Bounty +${species.bounty:N0}");
                 return;
             }
 

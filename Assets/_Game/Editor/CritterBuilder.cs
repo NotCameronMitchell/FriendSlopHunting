@@ -29,6 +29,7 @@ namespace FriendSlop.EditorTools
         // Paint list for the current build.
         static List<Renderer> _rends;
         static List<Color> _cols;
+        static List<Color> _emis;
         static Material _mat;
 
         public static Persona PersonaFor(string file) => file switch
@@ -41,6 +42,11 @@ namespace FriendSlop.EditorTools
             "Wolf" => Persona.Wolf,
             "Moose" => Persona.Moose,
             "Bear" => Persona.Bear,
+            "Raccoon" => Persona.Raccoon,
+            "Opossum" => Persona.Opossum,
+            "Coyote" => Persona.Coyote,
+            "GhostGoose" => Persona.Goose,
+            "ShadowStag" => Persona.Deer,
             _ => Persona.Boss,
         };
 
@@ -48,7 +54,9 @@ namespace FriendSlop.EditorTools
         {
             _rends = new List<Renderer>();
             _cols = new List<Color>();
+            _emis = new List<Color>();
             _mat = mat;
+            // Glowing eyes (night creatures, Big Doug) use emission; black for everyone else.
             var rig = visual.gameObject.AddComponent<CritterRig>();
             rig.persona = PersonaFor(file);
 
@@ -59,8 +67,15 @@ namespace FriendSlop.EditorTools
                 _ => Quadruped(s, visual, rig),
             };
 
+            if (s.ghostly || s.shadowy) Spookify(rig, s);
+            if (rig.persona == Persona.Boss)
+                for (int i = 0; i < _rends.Count; i++) if (_rends[i].name == "Pupil") _emis[i] = new Color(1.8f, 0.25f, 0.1f);
+            // Glowing parts use a material with emission switched on (property blocks set each glow color).
+            for (int i = 0; i < _rends.Count; i++)
+                if (_emis[i].maxColorComponent > 0f && _rends[i].sharedMaterial == _mat) _rends[i].sharedMaterial = GlowMaterial();
             rig.paintRenderers = _rends.ToArray();
             rig.paintColors = _cols.ToArray();
+            rig.paintEmission = _emis.ToArray();
             return r;
         }
 
@@ -75,7 +90,8 @@ namespace FriendSlop.EditorTools
             Color belly = Color.Lerp(fur, Color.white, p == Persona.Bear ? 0.25f : 0.45f);
             Color dark = Color.Lerp(fur, Ink, 0.7f);
             float bodyY = leg + H * 0.5f;
-            bool chunky = p == Persona.Bear || p == Persona.Boar || p == Persona.Boss;
+            bool chunky = p == Persona.Bear || p == Persona.Boar || p == Persona.Boss || p == Persona.Raccoon;
+            bool canine = p == Persona.Wolf || p == Persona.Coyote;
 
             var posture = Node("Posture", visual, new Vector3(0f, leg, -L * 0.32f));
             var body = Node("Body", posture, new Vector3(0f, bodyY, 0f));
@@ -114,13 +130,13 @@ namespace FriendSlop.EditorTools
             Limb("Neck", headPivot, neckBase, headPos, H * (chunky ? 0.6f : 0.42f), fur);
             Mesh(PrimitiveType.Sphere, "Skull", headPivot, headPos, new Vector3(head * 1.0f, head * 0.9f, head * 1.1f), fur);
 
-            float snoutLen = p == Persona.Wolf ? 0.85f : p == Persona.Moose ? 0.9f : p == Persona.Boar ? 0.6f : 0.65f;
+            float snoutLen = canine ? 0.85f : p == Persona.Opossum ? 1.0f : p == Persona.Moose ? 0.9f : p == Persona.Boar || p == Persona.Raccoon ? 0.6f : 0.65f;
             var snout = headPos + new Vector3(0f, -head * 0.14f, head * 0.5f);
-            Mesh(PrimitiveType.Sphere, "Snout", headPivot, snout, new Vector3(head * 0.6f, head * 0.5f, head * snoutLen), p == Persona.Boar ? Color.Lerp(fur, Pink, 0.35f) : belly);
+            Mesh(PrimitiveType.Sphere, "Snout", headPivot, snout, new Vector3(head * 0.6f, head * 0.5f, head * snoutLen), p == Persona.Boar ? Color.Lerp(fur, Pink, 0.35f) : p == Persona.Opossum ? new Color(0.97f, 0.95f, 0.92f) : belly);
             var noseAt = snout + new Vector3(0f, head * 0.08f, head * snoutLen * 0.45f);
             rig.nose = p == Persona.Boar
                 ? Mesh(PrimitiveType.Cylinder, "Nose", headPivot, noseAt, new Vector3(head * 0.38f, head * 0.05f, head * 0.32f), Color.Lerp(Pink, Ink, 0.35f), Quaternion.Euler(90f, 0f, 0f)).transform
-                : Mesh(PrimitiveType.Sphere, "Nose", headPivot, noseAt, Vector3.one * head * (p == Persona.Moose ? 0.32f : 0.2f), Ink).transform;
+                : Mesh(PrimitiveType.Sphere, "Nose", headPivot, noseAt, Vector3.one * head * (p == Persona.Moose ? 0.32f : 0.2f), p == Persona.Opossum ? Pink : Ink).transform;
 
             // Jaw + tongue
             var jawPivot = Node("Jaw", headPivot, headPos + new Vector3(0f, -head * 0.3f, head * 0.15f));
@@ -135,16 +151,20 @@ namespace FriendSlop.EditorTools
                     Mesh(PrimitiveType.Capsule, "Tusk", jawPivot, headPos + new Vector3(e * head * 0.26f, -head * 0.2f, head * 0.62f), new Vector3(head * 0.08f, head * 0.18f, head * 0.08f), acc, Quaternion.Euler(-30f, 0f, e * 15f));
 
             Face(rig, headPivot, headPos, head, 0.27f, 0.14f, 0.38f, 0.34f, p == Persona.Boss ? new Color(1f, 0.25f, 0.1f) : Pupil);
+            if (p == Persona.Raccoon) // bandit mask
+                Mesh(PrimitiveType.Cube, "Mask", headPivot, headPos + new Vector3(0f, head * 0.13f, head * 0.33f), new Vector3(head * 1.0f, head * 0.24f, head * 0.22f), Ink);
 
             // Ears
             float earLen = head * (s.bigEars ? 0.45f : 0.28f);
-            bool round = p == Persona.Bear;
+            bool round = p == Persona.Bear || p == Persona.Raccoon || p == Persona.Opossum;
+            Color earCol = p == Persona.Opossum ? Ink : fur;
+            Color innerCol = p == Persona.Raccoon ? Color.white : Pink;
             var ears = new List<Transform>();
             for (int e = -1; e <= 1; e += 2)
             {
                 var ear = Node("Ear", headPivot, headPos + new Vector3(e * head * 0.32f, head * 0.36f, -head * 0.12f), Quaternion.Euler(0f, 0f, -e * (round ? 10f : 28f)));
-                LocalMesh(PrimitiveType.Sphere, "Ear", ear, new Vector3(0f, earLen * 0.42f, 0f), round ? new Vector3(head * 0.26f, head * 0.24f, head * 0.12f) : new Vector3(head * 0.17f, earLen, head * 0.07f), fur);
-                LocalMesh(PrimitiveType.Sphere, "Inner", ear, new Vector3(0f, earLen * 0.42f, head * 0.03f), round ? new Vector3(head * 0.15f, head * 0.14f, head * 0.06f) : new Vector3(head * 0.09f, earLen * 0.7f, head * 0.03f), Pink);
+                LocalMesh(PrimitiveType.Sphere, "Ear", ear, new Vector3(0f, earLen * 0.42f, 0f), round ? new Vector3(head * 0.26f, head * 0.24f, head * 0.12f) : new Vector3(head * 0.17f, earLen, head * 0.07f), earCol);
+                LocalMesh(PrimitiveType.Sphere, "Inner", ear, new Vector3(0f, earLen * 0.42f, head * 0.03f), round ? new Vector3(head * 0.15f, head * 0.14f, head * 0.06f) : new Vector3(head * 0.09f, earLen * 0.7f, head * 0.03f), innerCol);
                 ears.Add(ear);
             }
             rig.ears = ears.ToArray();
@@ -165,7 +185,22 @@ namespace FriendSlop.EditorTools
             var tailPivot = Node("Tail", body, new Vector3(0f, bodyY + H * 0.25f, -L * 0.5f));
             switch (p)
             {
+                case Persona.Raccoon:
+                {
+                    var tail = Node("Rings", tailPivot, tailPivot.position, Quaternion.Euler(20f, 0f, 0f));
+                    for (int i = 0; i < 5; i++)
+                        LocalMesh(PrimitiveType.Capsule, "Ring", tail, new Vector3(0f, 0f, -H * (0.12f + i * 0.13f)), new Vector3(H * 0.3f, H * 0.09f, H * 0.3f), i % 2 == 0 ? fur : Ink, Quaternion.Euler(90f, 0f, 0f));
+                    break;
+                }
+                case Persona.Opossum:
+                {
+                    var tail = Node("Bare", tailPivot, tailPivot.position, Quaternion.Euler(15f, 0f, 0f));
+                    LocalMesh(PrimitiveType.Capsule, "Tail", tail, new Vector3(0f, 0f, -L * 0.3f), new Vector3(H * 0.09f, L * 0.3f, H * 0.09f), acc, Quaternion.Euler(90f, 0f, 0f));
+                    LocalMesh(PrimitiveType.Sphere, "Curl", tail, new Vector3(0f, -H * 0.05f, -L * 0.6f), Vector3.one * H * 0.12f, acc);
+                    break;
+                }
                 case Persona.Wolf:
+                case Persona.Coyote:
                 {
                     var tail = Node("Brush", tailPivot, tailPivot.position, Quaternion.Euler(35f, 0f, 0f));
                     float len = L * 0.5f;
@@ -189,7 +224,7 @@ namespace FriendSlop.EditorTools
             rig.posture = posture; rig.body = body; rig.head = headPivot;
             rig.stride = 1f / (leg * 2.4f + 0.25f);
             rig.legSwing = p == Persona.Bear || p == Persona.Moose ? 26f : 34f;
-            rig.grazer = p == Persona.Deer || p == Persona.Moose || p == Persona.Boar;
+            rig.grazer = p == Persona.Deer || p == Persona.Moose || p == Persona.Boar || p == Persona.Raccoon || p == Persona.Opossum;
 
             return new Result { bodyCenter = new Vector3(0f, bodyY, 0f), bodyRadius = H * 0.5f, bodyLength = L, headPos = headPos, headRadius = head * 0.6f };
         }
@@ -214,6 +249,72 @@ namespace FriendSlop.EditorTools
                     Mesh(PrimitiveType.Capsule, "Tine2", headPivot, b + new Vector3(e * head * 0.45f * a, head * 0.95f * a, -head * 0.1f), new Vector3(head * 0.08f, head * 0.22f * a, head * 0.08f), c, Quaternion.Euler(20f, 0f, -e * 10f));
                 }
             }
+        }
+
+        // ================================================================== spooky variants
+
+        /// <summary>
+        /// Ghosts: see-through pale bodies with hollow glowing eyes, hovering.
+        /// Shadow creatures: pitch-dark with burning eyes and faintly glowing antlers.
+        /// </summary>
+        static void Spookify(CritterRig rig, AnimalSpecies s)
+        {
+            Material ghost = s.ghostly ? GhostMaterial() : null;
+            for (int i = 0; i < _rends.Count; i++)
+            {
+                var r = _rends[i];
+                string n = r.name;
+                if (s.ghostly)
+                {
+                    r.sharedMaterial = ghost;
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    if (n == "White") { _cols[i] = new Color(0.6f, 0.9f, 1f, 0.6f); _emis[i] = new Color(0.15f, 0.4f, 0.5f); }
+                    else if (n == "Pupil") { _cols[i] = new Color(0.5f, 1f, 1f, 1f); _emis[i] = new Color(0.6f, 2.2f, 2.6f); } // hollow glowing eyes
+                    else if (n == "Shine") { _cols[i] = new Color(1f, 1f, 1f, 1f); _emis[i] = new Color(2f, 2f, 2f); }
+                    else if (n.StartsWith("Stroke")) { _cols[i] = new Color(0.5f, 1f, 1f, 0.9f); _emis[i] = new Color(0.3f, 1.2f, 1.4f); }
+                    else { var c = Color.Lerp(_cols[i], new Color(0.85f, 0.95f, 1f), 0.65f); c.a = 0.45f; _cols[i] = c; _emis[i] = new Color(0.08f, 0.14f, 0.18f); }
+                }
+                else
+                {
+                    if (n == "White") _cols[i] = new Color(0.08f, 0.02f, 0.1f);
+                    else if (n == "Pupil") { _cols[i] = new Color(1f, 0.25f, 0.9f); _emis[i] = new Color(2.2f, 0.3f, 1.8f); }
+                    else if (n.StartsWith("Antler") || n.StartsWith("Tine")) _emis[i] = new Color(0.35f, 0.06f, 0.45f);
+                }
+            }
+            rig.floaty = s.ghostly;
+        }
+
+        static Material GlowMaterial()
+        {
+            const string path = "Assets/_Game/Materials/AnimalGlow.mat";
+            var m = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (m == null) { m = new Material(Shader.Find("Universal Render Pipeline/Lit")); UnityEditor.AssetDatabase.CreateAsset(m, path); }
+            m.EnableKeyword("_EMISSION");
+            m.SetColor("_EmissionColor", Color.white);
+            m.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+            UnityEditor.EditorUtility.SetDirty(m);
+            return m;
+        }
+
+        static Material GhostMaterial()
+        {
+            const string path = "Assets/_Game/Materials/Ghost.mat";
+            var m = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (m == null) { m = new Material(Shader.Find("Universal Render Pipeline/Lit")); UnityEditor.AssetDatabase.CreateAsset(m, path); }
+            m.SetFloat("_Surface", 1f);
+            m.SetFloat("_Blend", 0f);
+            m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            m.SetFloat("_ZWrite", 0f);
+            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            m.EnableKeyword("_EMISSION");
+            m.SetColor("_EmissionColor", Color.white); // real glow comes from each part's property block
+            m.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
+            m.SetOverrideTag("RenderType", "Transparent");
+            m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            m.SetFloat("_Smoothness", 0.6f);
+            UnityEditor.EditorUtility.SetDirty(m);
+            return m;
         }
 
         // ================================================================== bird
@@ -441,6 +542,7 @@ namespace FriendSlop.EditorTools
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
             _rends.Add(r);
             _cols.Add(c);
+            _emis.Add(Color.black);
             return r;
         }
     }

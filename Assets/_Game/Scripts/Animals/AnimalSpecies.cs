@@ -85,6 +85,16 @@ namespace FriendSlop.Animals
         public float maxSpawnDistance = 70f;
         [HideInInspector] public int dataVersion; // builder migrations (e.g. v2 = big terrain map rings)
 
+        [Header("Night")]
+        [Tooltip("Only out at night: spawns at dusk, slinks off at dawn.")]
+        public bool nocturnal;
+        [Tooltip("Flops over and plays dead when spooked (opossum).")]
+        public bool playsDead;
+        [Tooltip("See-through, glowing-eyed, floaty (ghost geese).")]
+        public bool ghostly;
+        [Tooltip("Pitch-dark with glowing eyes (the Shadow Stag).")]
+        public bool shadowy;
+
         [Header("Boss")]
         public bool isBoss;
         public string bossTitle = "";

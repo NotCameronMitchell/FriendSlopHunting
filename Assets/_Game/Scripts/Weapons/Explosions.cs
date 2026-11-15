@@ -17,6 +17,7 @@ namespace FriendSlop.Weapons
             int n = Physics.OverlapSphereNonAlloc(center, def.explosionRadius, Hits, ~0, QueryTriggerInteraction.Ignore);
             var damaged = new HashSet<Animal>();
             var pushed = new HashSet<Rigidbody>();
+            var shoved = new HashSet<FriendSlop.Player.PlayerHealth>();
 
             for (int i = 0; i < n; i++)
             {
@@ -28,6 +29,21 @@ namespace FriendSlop.Weapons
                     float falloff = Mathf.Clamp01(1f - dist / def.explosionRadius);
                     Vector3 dir = (animal.transform.position - center + Vector3.up * 0.5f).normalized;
                     animal.ServerApplyHit(def.explosionDamage * (0.35f + 0.65f * falloff), dir, ShotStyle.None, shooterId);
+                    continue;
+                }
+
+                if (col.TryGetComponent(out FriendSlop.Player.PlayerHealth player) && shoved.Add(player))
+                {
+                    // Everyone gets blasted (rocket jumps!); with friendly fire on, others also get hurt.
+                    float dist = Vector3.Distance(center, player.transform.position + Vector3.up);
+                    float falloff = Mathf.Clamp01(1f - dist / def.explosionRadius);
+                    Vector3 dir = (player.transform.position - center).normalized;
+                    Vector3 blast = (dir + Vector3.up * 0.8f).normalized * Mathf.Lerp(4f, 14f, falloff);
+                    bool self = player.OwnerClientId == shooterId;
+                    if (!self && FriendSlop.Game.GameState.FriendlyFireOn)
+                        player.ServerDamage(def.explosionDamage * FriendSlop.Game.LobbySettings.PlayerDamageScale * (0.3f + 0.7f * falloff), blast,
+                            $"{def.displayName} (thanks, {FriendSlop.Game.GameState.PlayerName(shooterId)})");
+                    else player.ServerShove(blast);
                     continue;
                 }
 

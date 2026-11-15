@@ -78,6 +78,8 @@ namespace FriendSlop.Profile
             Hat("helmet", "Knight Helmet", UnlockKind.Bucks, 700, parts: new[] { "Knight_Helmet", "Knight_HelmetVisor" }),
             Hat("wizard", "Wizard Hat", UnlockKind.Bucks, 350, parts: new[] { "Mage_Hat" }),
             Hat("bearhat", "Bear Hat", UnlockKind.Achievement, ach: "pack_leader", parts: new[] { "Barbarian_BearHat" }),
+            Hat("shadowantlers", "Shadow Antlers", UnlockKind.Achievement, ach: "shadow_hunter"),
+            Hat("goosehat", "Ghost Goose Hat", UnlockKind.Achievement, ach: "goosebumps"),
 
             // Accessories
             Acc("none", "Nothing", UnlockKind.Free),
@@ -90,6 +92,7 @@ namespace FriendSlop.Profile
             Acc("wizcape", "Wizard Cape", UnlockKind.Bucks, 400, parts: new[] { "Mage_Cape" }),
             Acc("quiver", "Quiver", UnlockKind.Bucks, 120, parts: new[] { "Ranger_Quiver" }),
             Acc("mask", "Bandit Mask", UnlockKind.Achievement, ach: "trickshot", parts: new[] { "RogueHooded_Mask" }),
+            Acc("headlamp", "Headlamp", UnlockKind.Achievement, ach: "night_shift"),
 
             // Colors (index = position in Palette)
             Col(0, "Hunter Orange", UnlockKind.Free), Col(1, "Forest Green", UnlockKind.Free),
@@ -124,12 +127,20 @@ namespace FriendSlop.Profile
                 IsMet = p => p.bossKills >= 1, Progress = p => $"{Mathf.Min(p.bossKills, 1)}/1", RewardId = "outfit_knight" },
             new Achievement { Id = "zoologist", Name = "Zoologist", Description = "Kill one of every regular species (8).",
                 IsMet = p => CountRegularSpecies(p) >= 8, Progress = p => $"{Mathf.Min(CountRegularSpecies(p), 8)}/8", RewardId = "color_8" },
+            new Achievement { Id = "night_shift", Name = "Night Shift", Description = "Bag 10 night critters (raccoons, opossums, coyotes).",
+                IsMet = p => NightCritters(p) >= 10, Progress = p => $"{Mathf.Min(NightCritters(p), 10)}/10", RewardId = "headlamp" },
+            new Achievement { Id = "goosebumps", Name = "Goosebumps", Description = "Put a ghost goose back to rest (they haunt you after every 50 geese).",
+                IsMet = p => p.KillsOf("Ghost Goose") >= 1, Progress = p => $"{Mathf.Min(p.KillsOf("Ghost Goose"), 1)}/1", RewardId = "goosehat" },
+            new Achievement { Id = "shadow_hunter", Name = "Shadow Hunter", Description = "Bag the elusive Shadow Stag (a rare night visitor).",
+                IsMet = p => p.KillsOf("Shadow Stag") >= 1, Progress = p => $"{Mathf.Min(p.KillsOf("Shadow Stag"), 1)}/1", RewardId = "shadowantlers" },
         };
+
+        static int NightCritters(PlayerProfile p) => p.KillsOf("Raccoon") + p.KillsOf("Opossum") + p.KillsOf("Coyote");
 
         static int CountRegularSpecies(PlayerProfile p)
         {
             int n = 0;
-            foreach (var s in p.speciesKilled) if (s != "Elk") n++;
+            foreach (var s in p.speciesKilled) if (s != "Elk" && s != "Ghost Goose" && s != "Shadow Stag") n++;
             return n;
         }
 
@@ -242,6 +253,31 @@ namespace FriendSlop.Profile
                         P(PrimitiveType.Cube, root, new Vector3(e * 0.38f, 0.58f, -0.04f), new Vector3(0.05f, 0.25f, 0.05f), c, Quaternion.Euler(15f, 0f, -e * 10f));
                     }
                     break;
+                case "shadowantlers":
+                {
+                    var dark = new Color(0.12f, 0.06f, 0.16f);
+                    var glow = new Color(1f, 0.3f, 0.95f);
+                    P(PrimitiveType.Cylinder, root, new Vector3(0f, 0.02f, 0f), new Vector3(0.6f, 0.04f, 0.6f), dark);
+                    for (int e = -1; e <= 1; e += 2)
+                    {
+                        P(PrimitiveType.Cube, root, new Vector3(e * 0.3f, 0.3f, 0f), new Vector3(0.06f, 0.55f, 0.06f), dark, Quaternion.Euler(0f, 0f, -e * 30f));
+                        P(PrimitiveType.Cube, root, new Vector3(e * 0.5f, 0.55f, 0.05f), new Vector3(0.05f, 0.3f, 0.05f), dark, Quaternion.Euler(-20f, 0f, -e * 65f));
+                        P(PrimitiveType.Sphere, root, new Vector3(e * 0.62f, 0.62f, 0.08f), Vector3.one * 0.08f, glow);
+                        P(PrimitiveType.Sphere, root, new Vector3(e * 0.42f, 0.58f, 0f), Vector3.one * 0.07f, glow);
+                    }
+                    break;
+                }
+                case "goosehat":
+                {
+                    var white = new Color(0.92f, 0.97f, 1f);
+                    var beak = new Color(1f, 0.6f, 0.15f);
+                    P(PrimitiveType.Sphere, root, new Vector3(0f, 0.12f, -0.05f), new Vector3(0.5f, 0.28f, 0.6f), white);
+                    P(PrimitiveType.Capsule, root, new Vector3(0f, 0.4f, 0.12f), new Vector3(0.12f, 0.22f, 0.12f), white);
+                    P(PrimitiveType.Sphere, root, new Vector3(0f, 0.62f, 0.18f), Vector3.one * 0.18f, white);
+                    P(PrimitiveType.Cube, root, new Vector3(0f, 0.6f, 0.31f), new Vector3(0.09f, 0.04f, 0.12f), beak);
+                    for (int e = -1; e <= 1; e += 2) P(PrimitiveType.Sphere, root, new Vector3(e * 0.06f, 0.65f, 0.25f), Vector3.one * 0.04f, new Color(0.1f, 0.9f, 1f));
+                    break;
+                }
                 case "crown":
                     var gold = new Color(1f, 0.82f, 0.2f);
                     P(PrimitiveType.Cylinder, root, new Vector3(0f, 0.08f, 0f), new Vector3(0.56f, 0.08f, 0.56f), gold);
@@ -265,7 +301,7 @@ namespace FriendSlop.Profile
         /// </summary>
         public static Transform BuildAccessory(string id, Transform faceAnchor, Transform neckAnchor)
         {
-            bool face = id == "shades" || id == "monocle";
+            bool face = id == "shades" || id == "monocle" || id == "headlamp";
             var parent = face ? faceAnchor : neckAnchor;
             if (parent == null) return null;
             var root = new GameObject($"Acc_{id}").transform;
@@ -285,6 +321,11 @@ namespace FriendSlop.Profile
                     for (int e = -1; e <= 1; e += 2)
                         P(PrimitiveType.Cube, root, new Vector3(e * 0.12f, 0f, 0.01f), new Vector3(0.17f, 0.09f, 0.03f), new Color(0.05f, 0.05f, 0.06f));
                     P(PrimitiveType.Cube, root, new Vector3(0f, 0.02f, 0.02f), new Vector3(0.4f, 0.02f, 0.02f), new Color(0.05f, 0.05f, 0.06f));
+                    break;
+                case "headlamp":
+                    P(PrimitiveType.Cube, root, new Vector3(0f, 0.2f, -0.02f), new Vector3(0.62f, 0.05f, 0.05f), new Color(0.15f, 0.15f, 0.17f));
+                    P(PrimitiveType.Cylinder, root, new Vector3(0f, 0.2f, 0.04f), new Vector3(0.12f, 0.03f, 0.12f), new Color(0.95f, 0.8f, 0.2f), Quaternion.Euler(90f, 0f, 0f));
+                    P(PrimitiveType.Sphere, root, new Vector3(0f, 0.2f, 0.065f), Vector3.one * 0.08f, new Color(1f, 1f, 0.8f));
                     break;
                 case "monocle":
                     P(PrimitiveType.Cylinder, root, new Vector3(0.12f, 0f, 0.02f), new Vector3(0.13f, 0.01f, 0.13f), new Color(1f, 0.82f, 0.2f), Quaternion.Euler(90f, 0f, 0f));

@@ -11,6 +11,8 @@ GameObject:
   - component: {fileID: 8061979921643835744}
   - component: {fileID: 4480342280409937114}
   - component: {fileID: 1134362826448036605}
+  - component: {fileID: 4869691094476101712}
+  - component: {fileID: 2498819441444926902}
   m_Layer: 0
   m_Name: GameState
   m_TagString: Untagged
@@ -45,7 +47,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 3720594231
+  GlobalObjectIdHash: 3088574441
   InScenePlacedSourceGlobalObjectIdHash: 0
   m_InScenePlacedDisabledByDefault: 0
   DeferredDespawnTick: 0
@@ -74,3 +76,36 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::FriendSlop.Game.GameState
   ShowTopMostFoldoutHeaderGroup: 1
   catalog: {fileID: 11400000, guid: bf61e79b833637047934ffcec5ab7710, type: 2}
+--- !u!114 &4869691094476101712
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5757512881851477920}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 558818b618cc3ca479d7ac2d314a4347, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FriendSlop.World.DayNightCycle
+  ShowTopMostFoldoutHeaderGroup: 1
+  dayLength: 720
+  startTime: 0.3
+--- !u!114 &2498819441444926902
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5757512881851477920}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e141e533bfe2e5d4da30c386e55fdda1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FriendSlop.Game.NightEvents
+  ShowTopMostFoldoutHeaderGroup: 1
+  ghostGoosePrefab: {fileID: 4093526814749484597, guid: 01ef97d3890397548b137eb87b1b7e8b, type: 3}
+  shadowStagPrefab: {fileID: 3063526882180272202, guid: 0d82876098262984fa1b6774b086d106, type: 3}
+  geesePerHaunting: 50
+  ghostsPerNight: 6
+  shadowStagChance: 0.2

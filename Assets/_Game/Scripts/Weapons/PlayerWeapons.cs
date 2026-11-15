@@ -45,6 +45,8 @@ namespace FriendSlop.Weapons
         public readonly NetworkVariable<int> Owned = new NetworkVariable<int>(1);
 
         NetworkPlayer _player;
+
+        FriendSlop.Player.PlayerHealth _health;
         Transform _model;
         Transform _muzzle;
         Vector3 _holderRest;
@@ -62,6 +64,7 @@ namespace FriendSlop.Weapons
         void Awake()
         {
             _player = GetComponent<NetworkPlayer>();
+            _health = GetComponent<FriendSlop.Player.PlayerHealth>();
             if (gunHolder) _holderRest = gunHolder.localPosition;
         }
 
@@ -280,6 +283,10 @@ namespace FriendSlop.Weapons
                                 bool head = hit.collider.TryGetComponent(out Hitbox hb) && hb.IsHead;
                                 ReportHit(index, animal, origin, hit.point, head, airborne);
                             }
+                            else if (hit.collider.TryGetComponent(out FriendSlop.Player.PlayerHealth victim) && victim != _health)
+                            {
+                                ReportPlayerHit(index, victim, origin, hit.point);
+                            }
                             else if (hit.rigidbody != null && hit.rigidbody.TryGetComponent(out NetworkPhysicsBox box))
                             {
                                 // Shoving dropped guns, boxes, etc. Push a little upward too so
@@ -304,6 +311,7 @@ namespace FriendSlop.Weapons
                     }
                     Projectile.Launch(def, spawn, pdir, transform, authority: true,
                         onAnimalHit: (a, point, head) => ReportHit(index, a, origin, point, head, airborne),
+                        onPlayerHit: (victim, point) => { if (victim != _health) ReportPlayerHit(index, victim, origin, point); },
                         onExplode: point => ExplodeRpc(index, point),
                         onFinished: def.kind == WeaponKind.Boomerang ? OnBoomerangBack : null);
                     break;
@@ -354,6 +362,14 @@ namespace FriendSlop.Weapons
             HitRpc(index, animal.NetworkObject, origin, point, head, airborne);
         }
 
+        void ReportPlayerHit(int index, FriendSlop.Player.PlayerHealth victim, Vector3 origin, Vector3 point)
+        {
+            if (!FriendSlop.Game.GameState.FriendlyFireOn || victim.IsDown.Value) return;
+            GameHud.ShowHitMarker(false);
+            SfxPlayer.Play2D(Sfx.HitTick, 0.5f, 0.8f);
+            PlayerHitRpc(index, victim.NetworkObject, origin, point);
+        }
+
         // ============================================================ Host
 
         [Rpc(SendTo.Server)]
@@ -395,6 +411,21 @@ namespace FriendSlop.Weapons
 
             float damage = head ? def.damage * def.headshotMultiplier : def.damage;
             animal.ServerApplyHit(damage, (point - origin).normalized, style, OwnerClientId);
+        }
+
+        /// <summary>Host: friendly fire. Only when the lobby allows it; same sanity checks as animal hits.</summary>
+        [Rpc(SendTo.Server)]
+        void PlayerHitRpc(int index, NetworkObjectReference target, Vector3 origin, Vector3 point, RpcParams rpcParams = default)
+        {
+            if (rpcParams.Receive.SenderClientId != OwnerClientId || !FriendSlop.Game.GameState.FriendlyFireOn) return;
+            var def = catalog.Get(index);
+            if (def == null || !WeaponCatalog.IsOwned(OwnedMask(), index)) return;
+            if ((origin - transform.position).sqrMagnitude > 25f) return;
+            if (!target.TryGet(out NetworkObject obj) || !obj.TryGetComponent(out FriendSlop.Player.PlayerHealth victim) || obj.OwnerClientId == OwnerClientId) return;
+            if ((obj.transform.position + Vector3.up - point).sqrMagnitude > 3f * 3f) return;
+            bool head = point.y - obj.transform.position.y > 1.45f;
+            float damage = def.damage * FriendSlop.Game.LobbySettings.PlayerDamageScale * (head ? 1.5f : 1f);
+            victim.ServerDamage(damage, (point - origin).normalized * 3f, $"{def.displayName} (thanks, {FriendSlop.Game.GameState.PlayerName(OwnerClientId)})");
         }
 
         [Rpc(SendTo.Server)]
