@@ -166,7 +166,7 @@ namespace FriendSlop.EditorTools
                 // Charges constantly and bowls hunters over.
                 Move(s, 1.6f, 9f); Fight(s, Temperament.Predator, aggro: 60f, lose: 120f, dmg: 35f, range: 2.4f, cd: 1.5f, knock: 22f, charge: 13f, flee: 0f);
                 Spawn(s, 0, 1, 0f, 0f);
-                s.isBoss = true; s.bossTitle = "Hamzilla the Hog"; s.bounty = 1000;
+                s.isBoss = true; s.bossTitle = "Hamageddon the Hog"; s.bounty = 1000;
             });
         }
 
@@ -242,6 +242,20 @@ namespace FriendSlop.EditorTools
                     s.population = Mathf.RoundToInt(s.population * 1.7f);
                 }
                 s.dataVersion = 3;
+                EditorUtility.SetDirty(s);
+            }
+            // Legal cleanup: "-zilla" names are a known trademark magnet (Toho). Our hog boss is Hamageddon now.
+            if (s.bossTitle != null && s.bossTitle.Contains("zilla")) { s.bossTitle = "Hamageddon the Hog"; EditorUtility.SetDirty(s); }
+            // v4: the valley grew again (~570 m walkable). Spread the rings out a little more and add a few animals.
+            if (s.dataVersion < 4)
+            {
+                if (s.population > 0)
+                {
+                    s.minSpawnDistance *= 1.15f;
+                    s.maxSpawnDistance = Mathf.Min(s.maxSpawnDistance * 1.2f, 272f);
+                    s.population = Mathf.RoundToInt(s.population * 1.2f);
+                }
+                s.dataVersion = 4;
                 EditorUtility.SetDirty(s);
             }
         }

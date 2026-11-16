@@ -10,13 +10,17 @@ namespace FriendSlop.Weapons
         Projectile,
         /// <summary>Thrown, flies out and comes back to the thrower.</summary>
         Boomerang,
+        /// <summary>Not a weapon: cast a bobber into water and reel in fish (see FishingRod).</summary>
+        Rod,
+        /// <summary>Not a weapon: a loud animal call that lures nearby animals toward you (predators too!).</summary>
+        Call,
     }
 
     public enum FireMode { Semi, Auto }
 
-    public enum ShotSound { Gunshot, HeavyGunshot, LightGunshot, Bow, Slingshot, Rocket, Throw }
+    public enum ShotSound { Gunshot, HeavyGunshot, LightGunshot, Bow, Slingshot, Rocket, Throw, Call }
 
-    public enum WeaponModel { Pistol, Revolver, Uzi, MachineGun, Minigun, Shotgun, Rifle, Bow, Slingshot, Boomerang, Bazooka }
+    public enum WeaponModel { Pistol, Revolver, Uzi, MachineGun, Minigun, Shotgun, Rifle, Bow, Slingshot, Boomerang, Bazooka, FishingRod, Call }
 
     /// <summary>
     /// Everything that makes a weapon feel different, as data. Ammo is unlimited by design;
@@ -29,6 +33,8 @@ namespace FriendSlop.Weapons
         public string displayName = "Pistol";
         [Tooltip("0 = free starter, always owned.")]
         public int price;
+        [Tooltip("Hunter level needed to buy it in the shop (1 = from the start).")]
+        public int requiredLevel = 1;
         [TextArea] public string blurb = "";
 
         [Header("Firing")]

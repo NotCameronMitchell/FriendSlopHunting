@@ -261,6 +261,95 @@ namespace FriendSlop.EditorTools
                 Debug.Log($"[Bridge] near → {a[0]} #{nth} at {tp}");
                 return;
             }
+            if (cmd == "fish-cast" || cmd == "fish-catch" || cmd == "fish-state")
+            {
+                var rod = FriendSlop.Fishing.FishingRod.Local;
+                var pw = FriendSlop.Weapons.PlayerWeapons.Local;
+                if (rod == null || pw == null) { Debug.LogWarning("[Bridge] fish: no local rod"); return; }
+                if (cmd == "fish-cast") rod.DevCast(pw.ViewCamera);
+                else if (cmd == "fish-catch") rod.DevCatch();
+                Debug.Log($"[Bridge] {cmd} → {rod.DevState}  fish on bank: {FriendSlop.Fishing.FishCatch.All.Count}");
+                return;
+            }
+            if (cmd.StartsWith("tutorial"))
+            {
+                // tutorial [offer|start|next|state] : drive the first-hunt tour
+                string sub = cmd.Length > 9 ? cmd.Substring(9).Trim() : "state";
+                if (sub == "offer") FriendSlop.Game.TutorialGuide.DevOffer();
+                else if (sub == "start") FriendSlop.Game.TutorialGuide.Replay();
+                else if (sub == "next") FriendSlop.Game.TutorialGuide.DevNext();
+                Debug.Log($"[Bridge] tutorial {sub} → step {FriendSlop.Game.TutorialGuide.StepName}, seen={FriendSlop.Profile.PlayerProfile.Current.tutorialSeen}");
+                return;
+            }
+            if (cmd == "scene-tree")
+            {
+                // List root objects and their direct children with descendant counts (for bisecting build problems).
+                var sb = new System.Text.StringBuilder("[Bridge] scene-tree →\n");
+                foreach (var root in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
+                {
+                    sb.AppendLine($"  {root.name} ({root.GetComponentsInChildren<Transform>(true).Length})");
+                    foreach (Transform c in root.transform)
+                        if (c.childCount > 0 || c.GetComponent<MeshFilter>()) sb.AppendLine($"     {c.name} ({c.GetComponentsInChildren<Transform>(true).Length})");
+                }
+                Debug.Log(sb.ToString());
+                return;
+            }
+            if (cmd.StartsWith("strip-go "))
+            {
+                // strip-go Boulders : DEBUG ONLY. Delete every GameObject with that name (and children) from the open scene, save.
+                string want = cmd.Substring(9).Trim();
+                int removed = 0;
+                foreach (var t in UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                    if (t != null && string.Equals(t.name, want, System.StringComparison.OrdinalIgnoreCase)) { UnityEngine.Object.DestroyImmediate(t.gameObject); removed++; }
+                UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+                UnityEditor.SceneManagement.EditorSceneManager.SaveOpenScenes();
+                Debug.Log($"[Bridge] strip-go removed {removed} × {want}");
+                return;
+            }
+            if (cmd.StartsWith("strip-test "))
+            {
+                // strip-test ambientfish : DEBUG ONLY. Remove every component of that type from the open scene and save it
+                // (used to bisect build problems). Rebuild the scene afterwards to get them back.
+                string want = cmd.Substring(11).Trim();
+                int removed = 0;
+                foreach (var mb in UnityEngine.Object.FindObjectsByType<Component>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                    if (mb != null && string.Equals(mb.GetType().Name, want, System.StringComparison.OrdinalIgnoreCase)) { UnityEngine.Object.DestroyImmediate(mb); removed++; }
+                UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+                UnityEditor.SceneManagement.EditorSceneManager.SaveOpenScenes();
+                Debug.Log($"[Bridge] strip-test removed {removed} × {want}");
+                return;
+            }
+            if (cmd.StartsWith("set-level "))
+            {
+                // set-level 3 : TEST ONLY (back up the profile first): set the local hunter's XP to that level.
+                int lv = int.Parse(cmd.Substring(10));
+                var prof = FriendSlop.Profile.PlayerProfile.Current;
+                prof.xp = FriendSlop.Profile.PlayerProfile.XpForLevel(lv);
+                var prog = FriendSlop.Player.PlayerProgress.Of(Unity.Netcode.NetworkManager.Singleton.LocalClientId);
+                if (prog != null && prog.IsOwner) prog.Level.Value = prof.Level;
+                Debug.Log($"[Bridge] level → {prof.Level}");
+                return;
+            }
+            if (cmd.StartsWith("buy "))
+            {
+                // buy Bazooka : try to buy a weapon by name (goes through the host's checks).
+                var pw = FriendSlop.Weapons.PlayerWeapons.Local;
+                string want = cmd.Substring(4).Trim();
+                for (int i = 0; pw != null && i < pw.Catalog.Count; i++)
+                    if (string.Equals(pw.Catalog.Get(i).displayName, want, System.StringComparison.OrdinalIgnoreCase)) { FriendSlop.Game.GameState.Instance.RequestBuyWeapon(i); break; }
+                Debug.Log($"[Bridge] buy {want} requested");
+                return;
+            }
+            if (cmd.StartsWith("pitch "))
+            {
+                // pitch 20 : look down 20 degrees (for screenshots of water / the ground).
+                var np = FriendSlop.Player.NetworkPlayer.Local;
+                float deg = float.Parse(cmd.Substring(6), System.Globalization.CultureInfo.InvariantCulture);
+                var f = typeof(FriendSlop.Player.NetworkPlayer).GetField("_pitch", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (np != null && f != null) f.SetValue(np, deg);
+                Debug.Log($"[Bridge] pitch → {deg}");
+                return;
+            }
             if (cmd.StartsWith("chat "))
             {
                 // chat hello team : send a chat line as the local player.
@@ -688,6 +777,12 @@ namespace FriendSlop.EditorTools
                     break;
                 case "refresh":
                     AssetDatabase.Refresh();
+                    // Make sure brand-new scripts are registered under the GUIDs in their .meta files (git stash/pop can leave them stale).
+                    foreach (var guid in AssetDatabase.FindAssets("t:MonoScript", new[] { "Assets/_Game/Scripts" }))
+                    {
+                        var p = AssetDatabase.GUIDToAssetPath(guid);
+                        if (AssetDatabase.LoadAssetAtPath<MonoScript>(p)?.GetClass() == null && p.EndsWith(".cs")) AssetDatabase.ImportAsset(p, ImportAssetOptions.ForceUpdate);
+                    }
                     Debug.Log("[Bridge] refresh done");
                     break;
                 case "play":
@@ -757,6 +852,12 @@ namespace FriendSlop.EditorTools
                     FriendSlop.Game.ShopMenu.RequestedTab = cmd.EndsWith("weapons") ? 0 : cmd.EndsWith("snacks") ? 1 : 2;
                     FriendSlop.Game.ShopMenu.Open();
                     Debug.Log("[Bridge] shop open");
+                    break;
+                case "ui-inventory":
+                    FriendSlop.Game.GameMenus.Show(FriendSlop.Game.GameMenus.Menu.Inventory);
+                    break;
+                case "ui-pause":
+                    FriendSlop.Game.GameMenus.Show(FriendSlop.Game.GameMenus.Menu.Pause);
                     break;
                 case "ui-close":
                     FriendSlop.Game.GameMenus.Close(); FriendSlop.Game.MapOverlay.IsOpen = false;

@@ -71,8 +71,10 @@ namespace FriendSlop.Player
             if (Health.Value > 0f) return false;
 
             IsDown.Value = true;
-            _serverRespawnAt = Time.time + respawnSeconds;
-            DownedRpc(respawnSeconds);
+            // With friends around, stay down longer so someone has time to come and revive you.
+            float wait = NetworkManager.ConnectedClientsIds.Count > 1 ? 14f : respawnSeconds;
+            _serverRespawnAt = Time.time + wait;
+            DownedRpc(wait);
             string victim = GameState.PlayerName(OwnerClientId);
             string killer = killerId != GameState.NoPlayer ? GameState.PlayerName(killerId) : null;
             GameState.Instance?.ServerAnnounce(DeathLines.Pick(victim, attacker, killer, weapon, boss));
@@ -80,6 +82,26 @@ namespace FriendSlop.Player
                 GameState.Feed.PlayerDown | (boss ? GameState.Feed.Boss : GameState.Feed.None));
             return true;
         }
+
+        /// <summary>A teammate held E next to us: get back up right here (half health) instead of walking from camp.</summary>
+        public void RequestRevive() => ReviveRpc();
+
+        [Rpc(SendTo.Server)]
+        void ReviveRpc(RpcParams rpcParams = default)
+        {
+            ulong rescuer = rpcParams.Receive.SenderClientId;
+            if (!IsDown.Value || rescuer == OwnerClientId) return;
+            if (!NetworkManager.ConnectedClients.TryGetValue(rescuer, out var c) || c.PlayerObject == null) return;
+            if ((c.PlayerObject.transform.position - transform.position).sqrMagnitude > 4f * 4f) return;
+            Health.Value = MaxHp * 0.5f;
+            IsDown.Value = false;
+            _protectedUntil = Time.time + spawnProtectionSeconds;
+            GameState.Instance?.ServerAnnounce($"{GameState.PlayerName(rescuer)} revived {GameState.PlayerName(OwnerClientId)}! Teamwork!");
+            RevivedRpc();
+        }
+
+        [Rpc(SendTo.Everyone)]
+        void RevivedRpc() => SfxPlayer.PlayAt(Sfx.HeadshotDing, transform.position + Vector3.up, 0.8f, 1.3f, 3f, 40f);
 
         void Update()
         {

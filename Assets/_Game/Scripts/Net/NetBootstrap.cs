@@ -80,6 +80,9 @@ namespace FriendSlop.Net
                     case "-fsh-join" when i + 1 < args.Length:
                         JoinDirect(args[i + 1]);
                         break;
+                    case "-fsh-autotest":
+                        gameObject.AddComponent<DevAutoTest>();
+                        break;
                     case "-fsh-quit-after" when i + 1 < args.Length && float.TryParse(args[i + 1], out float secs):
                         Invoke(nameof(QuitForTest), secs);
                         break;

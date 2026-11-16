@@ -70,10 +70,38 @@ namespace FriendSlop.Game
 
             if (FriendSlop.Game.UiTheme.Btn("Close (Tab / Esc)", GUILayout.Height(28))) GameMenus.Close();
             GUILayout.EndArea();
+            DrawFishLog(area);
+        }
+
+        /// <summary>Catch log beside the inventory: every species, how many you've landed, and your personal best.</summary>
+        void DrawFishLog(Rect beside)
+        {
+            var prof = FriendSlop.Profile.PlayerProfile.Current;
+            float w = 260f, h = 90f + FriendSlop.Fishing.FishSpecies.All.Length * 24f;
+            var area = new Rect(beside.xMax + 12f, beside.y, w, h);
+            if (area.xMax > Screen.width - 8f) return; // no room on tiny screens
+            GUI.Box(area, GUIContent.none);
+            GUI.Box(area, GUIContent.none);
+            GUILayout.BeginArea(new Rect(area.x + 14, area.y + 10, w - 28, h - 20));
+            GUILayout.Label("Fish log", _title);
+            GUILayout.Label(prof.fishCaught == 0 ? "Buy a Fishing Rod and cast into any lake or stream."
+                : $"{prof.fishCaught} caught · best: {prof.biggestFishKg:0.0} kg {prof.biggestFish}", _blurb);
+            foreach (var sp in FriendSlop.Fishing.FishSpecies.All)
+            {
+                int n = 0;
+                foreach (var c in prof.fishBySpecies) if (c.species == sp.Name) n = c.count;
+                var prev = GUI.color;
+                GUI.color = n > 0 ? Color.white : new Color(1f, 1f, 1f, 0.4f);
+                GUILayout.Label(n > 0 ? $"{sp.Name}  ×{n}" : "???", _stat);
+                GUI.color = prev;
+            }
+            GUILayout.EndArea();
         }
 
         static string Stats(WeaponDefinition d)
         {
+            if (d.kind == WeaponKind.Rod) return "Fishing · cast at water, click on the bite, hold to reel";
+            if (d.kind == WeaponKind.Call) return $"Animal call · lures animals within {d.noiseRadius:0} m · {d.fireInterval:0} s cooldown";
             string fire = d.IsAuto ? "auto" : "semi";
             string dmg = d.pellets > 1 ? $"{d.damage:0}×{d.pellets}" : $"{d.damage:0}";
             if (d.IsExplosive) dmg += $" + {d.explosionDamage:0} blast";

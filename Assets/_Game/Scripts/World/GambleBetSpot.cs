@@ -30,6 +30,9 @@ namespace FriendSlop.World
         {
             var state = GameState.Instance;
             int money = state != null ? state.Money.Value : 0;
+            int lv = FriendSlop.Profile.PlayerProfile.Current.Level;
+            if (lv < GambleStation.LodgeLevel)
+                return $"LOCKED: the Lucky Lodge opens at hunter level {GambleStation.LodgeLevel} (you're level {lv}). Go hunt!";
             if (station != null && station.Busy)
                 return station.game == GambleGame.Scratchers ? "E scratch!" : $"{label}: rolling…";
             string jackpot = station != null && station.game == GambleGame.Slots && state != null ? $"   ·   JACKPOT ${state.LodgeJackpot.Value:N0}" : "";
@@ -41,6 +44,7 @@ namespace FriendSlop.World
         {
             var state = GameState.Instance;
             if (state == null || station == null) return;
+            if (FriendSlop.Profile.PlayerProfile.Current.Level < GambleStation.LodgeLevel) return;
             if (station.Busy)
             {
                 if (station.game == GambleGame.Scratchers) state.RequestGambleAction(station.id, 1);
@@ -50,23 +54,4 @@ namespace FriendSlop.World
         }
     }
 
-    /// <summary>The big "JACKPOT $X" sign over the Lucky Lodge, pulsing as the pot grows.</summary>
-    public class LodgeJackpotSign : MonoBehaviour
-    {
-        public TextMesh text;
-        int _shown = -1;
-        float _punch;
-
-        void Update()
-        {
-            var state = GameState.Instance;
-            if (text == null) return;
-            int value = state != null && state.IsSpawned ? state.LodgeJackpot.Value : GameState.JackpotSeed;
-            if (value != _shown) { if (_shown >= 0) _punch = 1f; _shown = value; text.text = $"JACKPOT  ${value:N0}"; }
-            _punch = Mathf.MoveTowards(_punch, 0f, Time.deltaTime * 2.5f);
-            float glow = 0.5f + 0.5f * Mathf.Sin(Time.time * 3f);
-            text.color = Color.Lerp(new Color(1f, 0.75f, 0.2f), new Color(1f, 0.95f, 0.6f), glow);
-            transform.localScale = Vector3.one * (1f + _punch * 0.25f);
-        }
-    }
 }

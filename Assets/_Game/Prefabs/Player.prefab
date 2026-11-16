@@ -174,6 +174,8 @@ GameObject:
   - component: {fileID: 3007061705231501932}
   - component: {fileID: 6393515669489891171}
   - component: {fileID: 4628034283135158183}
+  - component: {fileID: 146165377405727322}
+  - component: {fileID: 5476794278420512094}
   - component: {fileID: 1966090640508957023}
   m_Layer: 0
   m_Name: Player
@@ -236,7 +238,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 1646009020
+  GlobalObjectIdHash: 2209395594
   InScenePlacedSourceGlobalObjectIdHash: 0
   m_InScenePlacedDisabledByDefault: 0
   DeferredDespawnTick: 0
@@ -395,6 +397,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 06d5df2a84cf6814d9c5fa0edfc9961c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FriendSlop.Player.PlayerItems
+  ShowTopMostFoldoutHeaderGroup: 1
+--- !u!114 &146165377405727322
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9101798273086166683}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10b6c6e954c1e104ea419d2378617097, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FriendSlop.Fishing.FishingRod
+  ShowTopMostFoldoutHeaderGroup: 1
+--- !u!114 &5476794278420512094
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9101798273086166683}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9263af52157adb64aafed93840d02fbc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FriendSlop.Net.VoiceChat
   ShowTopMostFoldoutHeaderGroup: 1
 --- !u!114 &1966090640508957023
 MonoBehaviour:

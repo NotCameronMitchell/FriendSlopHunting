@@ -42,6 +42,83 @@ namespace FriendSlop.Player
         /// <summary>Riding in a vehicle: idle pose instead of running with the vehicle speed.</summary>
         public bool Seated { get; set; }
 
+        // ------------------------------------------------------------------ social animation
+        // Research (R.E.P.O./Lethal breakdowns): the funniest details are social. Talking makes your hunter's head bob
+        // with your voice, everyone nearby turns to look at whoever's talking, and emotes exist purely for comedy.
+
+        /// <summary>0..1 how loud this hunter is talking right now (voice chat).</summary>
+        public float TalkLevel { get; set; }
+        /// <summary>World point the head should turn toward (someone talking nearby), or null.</summary>
+        public Vector3? LookAtPoint { get; set; }
+        /// <summary>0 none, 1 dance, 2 cheer.</summary>
+        public int Emote { get; set; }
+
+        Transform _head, _chest, _hips, _armL, _armR;
+        bool _bonesFound;
+        float _talkSmooth, _emoteT;
+        Quaternion _headLook = Quaternion.identity;
+
+        void FindBones()
+        {
+            _bonesFound = true;
+            foreach (var t in GetComponentsInChildren<Transform>(true))
+            {
+                string n = t.name.ToLowerInvariant();
+                if (_head == null && n == "head") _head = t;
+                else if (_chest == null && n == "chest") _chest = t;
+                else if (_hips == null && n == "hips") _hips = t;
+                else if (_armL == null && n == "upperarm.l") _armL = t;
+                else if (_armR == null && n == "upperarm.r") _armR = t;
+            }
+        }
+
+        void SocialLateUpdate()
+        {
+            if (!_bonesFound) FindBones();
+            if (animator && animator.GetBool(DownId)) return;
+            float dt = Time.deltaTime;
+            _talkSmooth = Mathf.Lerp(_talkSmooth, Mathf.Clamp01(TalkLevel), 1f - Mathf.Exp(-18f * dt));
+
+            if (Emote == 1)
+            {
+                // The Dance: hips swing, torso bounces, arms pump overhead. Jank is the point.
+                _emoteT += dt;
+                float beat = _emoteT * Mathf.PI * 2f * 1.9f;
+                if (_hips) _hips.localRotation *= Quaternion.Euler(0f, Mathf.Sin(beat * 0.5f) * 35f, Mathf.Sin(beat) * 10f);
+                if (_chest) _chest.localRotation *= Quaternion.Euler(Mathf.Abs(Mathf.Sin(beat)) * 12f, 0f, -Mathf.Sin(beat) * 14f);
+                if (_armL) _armL.localRotation *= Quaternion.Euler(0f, 0f, 70f + Mathf.Sin(beat) * 50f);
+                if (_armR) _armR.localRotation *= Quaternion.Euler(0f, 0f, -70f - Mathf.Sin(beat + 1.4f) * 50f);
+            }
+            else if (Emote == 2)
+            {
+                // Cheer: both arms up, little hops of the chest.
+                _emoteT += dt;
+                float beat = _emoteT * Mathf.PI * 2f * 2.6f;
+                if (_armL) _armL.localRotation *= Quaternion.Euler(0f, 0f, 140f + Mathf.Sin(beat) * 15f);
+                if (_armR) _armR.localRotation *= Quaternion.Euler(0f, 0f, -140f - Mathf.Sin(beat) * 15f);
+                if (_chest) _chest.localRotation *= Quaternion.Euler(-Mathf.Abs(Mathf.Sin(beat)) * 10f, 0f, 0f);
+            }
+            else _emoteT = 0f;
+
+            if (_head)
+            {
+                // Turn to look at whoever's talking (limited, smoothed), then nod along with your own voice.
+                var want = Quaternion.identity;
+                if (LookAtPoint.HasValue)
+                {
+                    Vector3 to = LookAtPoint.Value - _head.position;
+                    Vector3 local = transform.InverseTransformDirection(to);
+                    float yaw = Mathf.Clamp(Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg, -70f, 70f);
+                    float pitch = Mathf.Clamp(-Mathf.Atan2(local.y, new Vector2(local.x, local.z).magnitude) * Mathf.Rad2Deg, -25f, 25f);
+                    want = Quaternion.Euler(pitch, yaw, 0f);
+                }
+                _headLook = Quaternion.Slerp(_headLook, want, 1f - Mathf.Exp(-6f * dt));
+                float nod = _talkSmooth * (Mathf.Sin(Time.time * 22f) * 8f + Mathf.Sin(Time.time * 13f) * 5f);
+                _head.rotation = transform.rotation * _headLook * Quaternion.Inverse(transform.rotation) * _head.rotation * Quaternion.Euler(-nod, 0f, nod * 0.3f);
+                _head.localScale = Vector3.one * (1f + _talkSmooth * 0.08f * (0.5f + 0.5f * Mathf.Sin(Time.time * 30f)));
+            }
+        }
+
         void Awake()
         {
             if (animator && animator.runtimeAnimatorController == null)
@@ -138,6 +215,8 @@ namespace FriendSlop.Player
 
         void LateUpdate()
         {
+            SocialLateUpdate();
+            if (Emote != 0) return; // arms are busy dancing
             // Hold the gun: point the right arm at where the weapon floats in front of the chest.
             if (AimTarget == null || upperArmR == null || lowerArmR == null || handR == null) return;
             if (animator && animator.GetBool(DownId)) return;

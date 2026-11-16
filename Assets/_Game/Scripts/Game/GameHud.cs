@@ -79,6 +79,7 @@ namespace FriendSlop.Game
         public static void ShowKill(string name, FriendSlop.Animals.ShotStyle style, int value, int bounty)
         {
             _killStart = Time.unscaledTime;
+            TutorialGuide.NoteKill();
             _killName = $"{name.ToUpperInvariant()} DOWN";
             var tags = new List<string>();
             if ((style & FriendSlop.Animals.ShotStyle.Headshot) != 0) tags.Add("HEADSHOT");
@@ -158,8 +159,12 @@ namespace FriendSlop.Game
             if (_feed.Count > 6) _feed.RemoveAt(0);
         }
 
+        /// <summary>Players whose chat this client has hidden (local only).</summary>
+        public static readonly HashSet<ulong> MutedChat = new HashSet<ulong>();
+
         void OnChat(ulong sender, string name, string text)
         {
+            if (MutedChat.Contains(sender)) return;
             _chat.Add(new ChatLine { Name = name, Text = text, Color = NameColor(sender), Born = Time.unscaledTime });
             if (_chat.Count > 30) _chat.RemoveAt(0);
             FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.UiHover, 0.5f, 0.8f);
@@ -169,7 +174,7 @@ namespace FriendSlop.Game
         {
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb == null || ChatOpen || GameMenus.AnyOpen || NetworkPlayer.Local == null || OptionsMenu.IsCapturingKey) return;
-            if (FriendSlop.Settings.Controls.Pressed(FriendSlop.Settings.GameAction.Chat) || kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)
+            if (FriendSlop.Settings.Controls.Pressed(FriendSlop.Settings.GameAction.Chat) || !TutorialGuide.WantsKeys && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame))
             {
                 _chatText = "";
                 _chatOpenedFrame = Time.frameCount;
@@ -219,7 +224,7 @@ namespace FriendSlop.Game
             _chatStyle ??= new GUIStyle(UiTheme.HudLabel) { fontSize = 15, alignment = TextAnchor.MiddleLeft, richText = true, wordWrap = true };
             var prev = GUI.color;
             float w = Mathf.Min(520f, Screen.width * 0.4f);
-            float bottom = Screen.height - 160f;
+            float bottom = Screen.height - 230f; // above the mic line and the speaker list
             if (open)
             {
                 var box = new Rect(14f, bottom - 6f, w, 34f);
@@ -276,12 +281,18 @@ namespace FriendSlop.Game
         /// <summary>Stop players from injecting rich-text tags into chat.</summary>
         static string Escape(string s) => s.Replace("<", "‹").Replace(">", "›");
 
+        void Awake()
+        {
+            if (!GetComponent<TutorialGuide>()) gameObject.AddComponent<TutorialGuide>();
+        }
+
         void OnEnable()
         {
             GameState.KillFeed += OnKillFeed;
             GameState.ChatMessage += OnChat;
             GameState.Announced += OnAnnounced;
             FriendSlop.Profile.PlayerProfile.AchievementUnlocked += OnAchievement;
+            FriendSlop.Profile.PlayerProfile.FishLogged += OnFishLogged;
             FriendSlop.Profile.PlayerProfile.LevelUp += OnLevelUp;
         }
 
@@ -290,6 +301,13 @@ namespace FriendSlop.Game
             OnAnnounced($"LEVEL UP! Hunter level {level}. Check the gun shop for new upgrades.");
             ShowBanner("LEVEL UP!", $"Hunter level {level}  ·  new upgrades at the gun shop", UiTheme.Gold);
             FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.Fanfare, 0.8f);
+        }
+
+        void OnFishLogged(string species)
+        {
+            int n = FriendSlop.Profile.PlayerProfile.Current.fishBySpecies.Count;
+            ShowBanner("NEW CATCH!", $"{species} added to your fish log  ·  {n}/{FriendSlop.Fishing.FishSpecies.All.Length} species", new Color(0.45f, 0.85f, 1f));
+            FriendSlop.Audio.SfxPlayer.Play2D(FriendSlop.Audio.Sfx.Fanfare, 0.5f, 1.4f);
         }
 
         void OnAchievement(string id, string name)
@@ -306,6 +324,7 @@ namespace FriendSlop.Game
             GameState.ChatMessage -= OnChat;
             GameState.Announced -= OnAnnounced;
             FriendSlop.Profile.PlayerProfile.AchievementUnlocked -= OnAchievement;
+            FriendSlop.Profile.PlayerProfile.FishLogged -= OnFishLogged;
             FriendSlop.Profile.PlayerProfile.LevelUp -= OnLevelUp;
         }
 
@@ -570,14 +589,19 @@ namespace FriendSlop.Game
                 GUI.Label(new Rect(panel.x + 80, panel.y + 4, panel.width - 90, 18), $"{prof.xp - lo:N0} / {hi - lo:N0} XP", xpStyle);
                 bar = new Rect(panel.x, panel.y - 4, panel.width, 26); // mic line sits just above the panel
 
-                // Mic status (voice chat itself arrives later; the controls already work).
+                // Mic status, plus who's talking right now.
                 string mic = null;
                 if (FriendSlop.Settings.GameSettings.MicMuted)
                 {
                     mic = $"MIC MUTED ({FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.ToggleMute)})";
                     GUI.color = new Color(1f, 0.45f, 0.4f);
                 }
-                else if (FriendSlop.Settings.GameSettings.PushToTalk && FriendSlop.Settings.Controls.Held(FriendSlop.Settings.GameAction.PushToTalk))
+                else if (!FriendSlop.Net.VoiceChat.HasMic)
+                {
+                    mic = "NO MIC";
+                    GUI.color = new Color(0.85f, 0.85f, 0.85f, 0.6f);
+                }
+                else if (FriendSlop.Net.VoiceChat.LocalTransmitting)
                 {
                     mic = "TALKING";
                     GUI.color = new Color(0.5f, 1f, 0.5f);
@@ -587,7 +611,23 @@ namespace FriendSlop.Game
                     mic = "OPEN MIC";
                     GUI.color = new Color(0.85f, 0.85f, 0.85f, 0.7f);
                 }
+                else
+                {
+                    mic = $"PUSH TO TALK ({FriendSlop.Settings.Controls.Label(FriendSlop.Settings.GameAction.PushToTalk)})";
+                    GUI.color = new Color(0.85f, 0.85f, 0.85f, 0.55f);
+                }
                 if (mic != null) Shadowed(new Rect(bar.x, bar.y - 26, 300, 22), mic, _small);
+                GUI.color = Color.white;
+                // Speaker list: everyone whose voice we're hearing right now.
+                float sy = bar.y - 52f;
+                foreach (var p in NetworkPlayer.All)
+                {
+                    if (p == null || !p.IsSpawned || p.IsOwner || !FriendSlop.Net.VoiceChat.IsSpeaking(p.OwnerClientId)) continue;
+                    GUI.color = new Color(0.55f, 1f, 0.6f, 0.9f);
+                    bool radio = p.TryGetComponent(out FriendSlop.Net.VoiceChat vc) && vc.InRadio;
+                    Shadowed(new Rect(bar.x, sy, 300, 22), $"♪ {GameState.PlayerName(p.OwnerClientId)}{(radio ? "  (radio)" : "")}", _small);
+                    sy -= 22f;
+                }
                 GUI.color = Color.white;
 
                 if (hp.IsDown.Value)
@@ -597,7 +637,7 @@ namespace FriendSlop.Game
                     GUI.color = Color.white;
                     int secs = Mathf.Max(0, Mathf.CeilToInt(hp.RespawnAt - Time.time));
                     Shadowed(new Rect(0, Screen.height / 2f - 40, Screen.width, 50), "YOU GOT WRECKED", _big);
-                    Shadowed(new Rect(0, Screen.height / 2f + 10, Screen.width, 30), $"Back at camp in {secs}…", _toast);
+                    Shadowed(new Rect(0, Screen.height / 2f + 10, Screen.width, 30), NetworkPlayer.All.Count > 1 ? $"Back at camp in {secs}…  (a friend can hold E next to you to revive you)" : $"Back at camp in {secs}…", _toast);
                 }
             }
 

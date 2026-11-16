@@ -83,6 +83,35 @@ namespace FriendSlop.Game
                 Application.Quit();
             }
             GUILayout.EndArea();
+            DrawPlayers(new Rect(area.xMax + 14f, area.y, 300f, area.height));
+        }
+
+        /// <summary>Everyone in the session, with per-player voice and chat mutes (only affects what YOU hear and see).</summary>
+        void DrawPlayers(Rect area)
+        {
+            var others = new System.Collections.Generic.List<FriendSlop.Player.NetworkPlayer>();
+            foreach (var p in FriendSlop.Player.NetworkPlayer.All) if (p != null && p.IsSpawned && !p.IsOwner) others.Add(p);
+            if (area.xMax > Screen.width - 8f) area.x = Screen.width - 8f - area.width;
+            GUI.Box(area, GUIContent.none);
+            GUI.Box(area, GUIContent.none);
+            GUILayout.BeginArea(new Rect(area.x + 16, area.y + 16, area.width - 32, area.height - 32));
+            GUILayout.Label("Players", _title);
+            if (others.Count == 0) GUILayout.Label("Nobody else is here yet. Invite some friends!", _small);
+            foreach (var p in others)
+            {
+                ulong id = p.OwnerClientId;
+                GUILayout.Label(GameState.PlayerName(id), _label);
+                GUILayout.BeginHorizontal();
+                bool voice = FriendSlop.Net.VoiceChat.MutedPlayers.Contains(id);
+                bool chat = GameHud.MutedChat.Contains(id);
+                if (FriendSlop.Game.UiTheme.Btn(voice ? "Unmute voice" : "Mute voice", GUILayout.Height(26)))
+                { if (voice) FriendSlop.Net.VoiceChat.MutedPlayers.Remove(id); else FriendSlop.Net.VoiceChat.MutedPlayers.Add(id); }
+                if (FriendSlop.Game.UiTheme.Btn(chat ? "Unmute chat" : "Mute chat", GUILayout.Height(26)))
+                { if (chat) GameHud.MutedChat.Remove(id); else GameHud.MutedChat.Add(id); }
+                GUILayout.EndHorizontal();
+                GUILayout.Space(4);
+            }
+            GUILayout.EndArea();
         }
 
         void DrawOptions()
@@ -161,6 +190,12 @@ namespace FriendSlop.Game
             GUILayout.EndHorizontal();
             GUILayout.Space(10);
             if (FriendSlop.Game.UiTheme.Btn("Reset controls to defaults", GUILayout.Width(260), GUILayout.Height(30))) Controls.ResetToDefaults();
+            if (GameState.Instance != null && GameState.Instance.IsSpawned
+                && FriendSlop.Game.UiTheme.Btn("Replay the first-hunt tour", GUILayout.Width(260), GUILayout.Height(30)))
+            {
+                TutorialGuide.Replay();
+                GameMenus.Close();
+            }
         }
 
         void DrawAudio()
@@ -183,7 +218,7 @@ namespace FriendSlop.Game
 
         void DrawVoice()
         {
-            GUILayout.Label("Proximity voice chat is coming in a later update; these settings are saved for it now.", _small);
+            GUILayout.Label(FriendSlop.Net.VoiceChat.HasMic ? $"Proximity voice chat: friends hear you from your hunter, fading with distance. Mic: {Microphone.devices[0]}" : "No microphone found. You can still hear everyone else.", _small);
             GUILayout.Space(8);
             bool ptt = GameSettings.PushToTalk;
             GUILayout.BeginHorizontal();

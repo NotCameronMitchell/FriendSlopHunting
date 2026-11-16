@@ -42,7 +42,7 @@ namespace FriendSlop.EditorTools
             });
             yield return ("Uzi", w =>
             {
-                Name(w, "Uzi", 650, "Brrrt. Sprays everything within spitting distance.", WeaponModel.Uzi);
+                Name(w, "Bullet Hose", 650, "Brrrt. Sprays everything within spitting distance.", WeaponModel.Uzi);
                 Fire(w, WeaponKind.Hitscan, FireMode.Auto, 0.07f, 12f, 2.5f, spread: 4f, aimSpread: 2f, range: 70f);
                 Feel(w, ShotSound.LightGunshot, 1.4f, 0.45f, recoil: 0.8f, impulse: 4f, aimFov: 62f, noise: 35f);
             });
@@ -52,6 +52,22 @@ namespace FriendSlop.EditorTools
                 Fire(w, WeaponKind.Hitscan, FireMode.Semi, 0.8f, 18f, 2f, spread: 4f, aimSpread: 2f, range: 60f);
                 w.pellets = 8;
                 Feel(w, ShotSound.HeavyGunshot, 0.8f, 0.9f, recoil: 7f, impulse: 7f, aimFov: 62f, noise: 40f);
+            });
+            yield return ("FishingRod", w =>
+            {
+                Name(w, "Fishing Rod", 120, "Cast into any lake or stream, wait for the bite, then reel. Fish sell at the trader.", WeaponModel.FishingRod);
+                Fire(w, WeaponKind.Rod, FireMode.Semi, 0.5f, 0f, 1f, spread: 0f, aimSpread: 0f, range: 28f);
+                Feel(w, ShotSound.Throw, 1.3f, 0.4f, recoil: 0.3f, impulse: 0f, aimFov: 70f, noise: 0f);
+                w.tracer = false;
+                w.tint = new Color(0.2f, 0.55f, 0.85f);
+            });
+            yield return ("CritterCall", w =>
+            {
+                Name(w, "Critter Call", 300, "HONK. Animals nearby wander over to see what's up. So do wolves. And bears.", WeaponModel.Call);
+                Fire(w, WeaponKind.Call, FireMode.Semi, 6f, 0f, 1f, spread: 0f, aimSpread: 0f, range: 0f);
+                Feel(w, ShotSound.Call, 1f, 0.9f, recoil: 0.4f, impulse: 0f, aimFov: 70f, noise: 75f);
+                w.tracer = false;
+                w.tint = new Color(0.9f, 0.3f, 0.2f);
             });
             yield return ("Boomerang", w =>
             {
@@ -109,6 +125,12 @@ namespace FriendSlop.EditorTools
             { "Minigun", (1000, 6000) }, { "Bazooka", (1500, 9000) },
         };
 
+        static readonly Dictionary<string, int> RequiredLevels = new Dictionary<string, int>
+        {
+            { "Pistol", 1 }, { "FishingRod", 1 }, { "CritterCall", 3 }, { "Slingshot", 2 }, { "Revolver", 2 }, { "Boomerang", 3 }, { "Uzi", 4 }, { "Shotgun", 5 },
+            { "Bow", 6 }, { "BoltRifle", 7 }, { "MachineGun", 10 }, { "Minigun", 13 }, { "Bazooka", 16 },
+        };
+
         public static WeaponCatalog CreateOrUpdate()
         {
             EnsureFolder(Dir);
@@ -135,6 +157,11 @@ namespace FriendSlop.EditorTools
                     def.price = price.now;
                     EditorUtility.SetDirty(def);
                 }
+                // Legal cleanup: no real-world gun trademarks in player-facing names.
+                if (file == "Uzi" && def.displayName == "Uzi") { def.displayName = "Bullet Hose"; EditorUtility.SetDirty(def); }
+                // Level gates (design data, always applied): early guns right away, the big toys need a few sessions.
+                int lvl = RequiredLevels.TryGetValue(file, out var l) ? l : 1;
+                if (def.requiredLevel != lvl) { def.requiredLevel = lvl; EditorUtility.SetDirty(def); }
                 list.Add(def);
             }
 

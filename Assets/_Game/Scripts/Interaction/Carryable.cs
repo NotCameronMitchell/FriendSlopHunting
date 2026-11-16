@@ -96,8 +96,12 @@ namespace FriendSlop.Interaction
             ServerRelease(position, rotation, Vector3.ClampMagnitude(velocity, MaxThrowSpeed));
         }
 
+        /// <summary>Host only: who last carried/threw this (NoHolder if nobody ever did).</summary>
+        public ulong LastHolder { get; private set; } = NoHolder;
+
         void ServerRelease(Vector3 position, Quaternion rotation, Vector3 velocity)
         {
+            LastHolder = HolderId.Value;
             HolderId.Value = NoHolder;
             NetworkObject.RemoveOwnership();
 

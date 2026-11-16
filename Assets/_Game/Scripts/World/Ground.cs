@@ -9,7 +9,7 @@ namespace FriendSlop.World
         public const float WaterY = -0.4f;
 
         /// <summary>Half-size of the walkable valley (invisible walls); the terrain itself runs further out as backdrop peaks.</summary>
-        public const float PlayHalf = 240f;
+        public const float PlayHalf = 285f;
 
         /// <summary>Ground height under a point (terrain if present, else 0).</summary>
         public static float HeightAt(Vector3 p)

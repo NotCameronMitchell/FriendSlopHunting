@@ -18,15 +18,15 @@ namespace FriendSlop.EditorTools
     /// </summary>
     public static class TerrainBuilder
     {
-        public const float Half = 320f;                // terrain half-size (640 m square)
-        public const float PlayHalf = Ground.PlayHalf; // invisible walls (480 m walkable)
+        public const float Half = 380f;                // terrain half-size (760 m square)
+        public const float PlayHalf = Ground.PlayHalf; // invisible walls (570 m walkable)
         const float BaseY = -8f, Height = 190f;
         const int Res = 1025, SplatRes = 1024;
         const string Dir = "Assets/_Game/Data/Terrain";
         const string TexDir = "Assets/_Game/Materials/Ground";
         /// <summary>Mountain ring (meters from camp, rounded-square): foothills start, main peaks.</summary>
-        const float RingStart = 160f, RingPeak = 245f;
-        public static readonly Vector2 TotemXZ = new Vector2(-24f, -166f); // Big Doug's totem, out on the north ridge
+        const float RingStart = 195f, RingPeak = 292f;
+        public static readonly Vector2 TotemXZ = new Vector2(-28f, -200f); // Big Doug's totem, out on the north ridge
 
         struct Lake { public Vector2 c; public float r, depth; }
 
@@ -71,6 +71,7 @@ namespace FriendSlop.EditorTools
             new Lake { c = new Vector2(98f, 104f), r = 34f, depth = 1.6f },
             new Lake { c = new Vector2(-98f, 60f), r = 14f, depth = 1.2f },
             new Lake { c = new Vector2(40f, 150f), r = 9f, depth = 1f },
+            new Lake { c = new Vector2(-160f, 135f), r = 26f, depth = 1.9f }, // Fisherman's Lake, out in the west
         };
 
         static Stream[] _streams;
@@ -684,20 +685,21 @@ namespace FriendSlop.EditorTools
         {
             var root = new GameObject("Water").transform;
             root.SetParent(parent, false);
-            var lakeMat = WaterMaterial("WaterLake", new Color(0.2f, 0.48f, 0.6f, 0.78f));
-            var streamMat = WaterMaterial("WaterStream", new Color(0.3f, 0.58f, 0.68f, 0.72f));
+            var lakeMat = WaterMaterial("WaterLake", lake: true);
+            var streamMat = WaterMaterial("WaterStream", lake: false);
 
             for (int i = 0; i < Lakes.Length; i++)
             {
                 var l = Lakes[i];
-                var go = new GameObject(i == 0 ? "Lake" : "Pond");
+                var go = new GameObject(i == 0 ? "Lake" : i == 3 ? "FishermansLake" : "Pond");
                 go.transform.SetParent(root, false);
                 go.transform.position = new Vector3(l.c.x, Ground.WaterY, l.c.y);
-                go.AddComponent<MeshFilter>().sharedMesh = Disc(l.r + 2.5f, 64);
+                go.AddComponent<MeshFilter>().sharedMesh = Disc(l.r + 2.5f, 72);
                 go.AddComponent<MeshRenderer>().sharedMaterial = lakeMat;
                 go.AddComponent<WaterSurface>().flow = new Vector2(0.004f, 0.007f);
                 var vol = go.AddComponent<WaterVolume>();
                 vol.isLake = true; vol.radius = l.r; vol.points = new[] { new Vector3(l.c.x, Ground.WaterY, l.c.y) };
+                go.AddComponent<FriendSlop.Fishing.AmbientFish>(); // fish you can see cruising and leaping
 
                 // Animals walk around lakes, not through them.
                 var block = go.AddComponent<NavMeshModifierVolume>();
@@ -721,19 +723,37 @@ namespace FriendSlop.EditorTools
             }
         }
 
+        /// <summary>A disc made of concentric rings (~1.5 m apart) so the shader's swells have vertices to move.</summary>
         static Mesh Disc(float radius, int segs)
         {
-            var verts = new Vector3[segs + 1]; var uvs = new Vector2[segs + 1]; var tris = new int[segs * 3];
-            verts[0] = Vector3.zero; uvs[0] = Vector2.zero;
-            for (int i = 0; i < segs; i++)
+            int rings = Mathf.Max(4, Mathf.CeilToInt(radius / 1.5f));
+            var verts = new System.Collections.Generic.List<Vector3> { Vector3.zero };
+            var uvs = new System.Collections.Generic.List<Vector2> { Vector2.zero };
+            var tris = new System.Collections.Generic.List<int>();
+            for (int r = 1; r <= rings; r++)
             {
-                float a = i * Mathf.PI * 2f / segs;
-                verts[i + 1] = new Vector3(Mathf.Cos(a) * radius, 0f, Mathf.Sin(a) * radius);
-                uvs[i + 1] = new Vector2(verts[i + 1].x, verts[i + 1].z) / 6f;
-                tris[i * 3] = 0; tris[i * 3 + 1] = (i + 1) % segs + 1; tris[i * 3 + 2] = i + 1;
+                float rad = radius * r / rings;
+                for (int i = 0; i < segs; i++)
+                {
+                    float a = i * Mathf.PI * 2f / segs;
+                    var v = new Vector3(Mathf.Cos(a) * rad, 0f, Mathf.Sin(a) * rad);
+                    verts.Add(v); uvs.Add(new Vector2(v.x, v.z) / 6f);
+                }
             }
-            var m = new Mesh { name = "WaterDisc", vertices = verts, uv = uvs, triangles = tris };
+            for (int i = 0; i < segs; i++) { tris.Add(0); tris.Add((i + 1) % segs + 1); tris.Add(i + 1); }
+            for (int r = 1; r < rings; r++)
+            {
+                int a0 = 1 + (r - 1) * segs, b0 = 1 + r * segs;
+                for (int i = 0; i < segs; i++)
+                {
+                    int i1 = (i + 1) % segs;
+                    tris.AddRange(new[] { a0 + i, a0 + i1, b0 + i, a0 + i1, b0 + i1, b0 + i });
+                }
+            }
+            var m = new Mesh { name = "WaterDisc" }; // 16-bit indices (well under 65k verts)
+            m.SetVertices(verts); m.SetUVs(0, uvs); m.SetTriangles(tris, 0);
             m.RecalculateNormals(); m.RecalculateBounds();
+            m.bounds = new Bounds(m.bounds.center, m.bounds.size + Vector3.up * 1f); // room for the swells
             return m;
         }
 
@@ -766,7 +786,38 @@ namespace FriendSlop.EditorTools
             return m;
         }
 
-        static Material WaterMaterial(string name, Color color)
+        /// <summary>Stylized water (FriendSlop/StylizedWater): depth colour, shore foam, refraction, flowing ripples.</summary>
+        static Material WaterMaterial(string name, bool lake)
+        {
+            string path = $"{TexDir}/{name}.mat";
+            var shader = Shader.Find("FriendSlop/StylizedWater");
+            var ripple = AssetDatabase.LoadAssetAtPath<Texture2D>($"{TexDir}/WaterRipple.png") ?? SaveTexture($"{TexDir}/WaterRipple.png", RippleTexture(), false);
+            var normal = AssetDatabase.LoadAssetAtPath<Texture2D>($"{TexDir}/WaterNormal.png") ?? SaveTexture($"{TexDir}/WaterNormal.png", RippleNormal(), true);
+            if (shader == null) return LegacyWaterMaterial(name, lake ? new Color(0.2f, 0.48f, 0.6f, 0.78f) : new Color(0.3f, 0.58f, 0.68f, 0.72f));
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat == null) { mat = new Material(shader); AssetDatabase.CreateAsset(mat, path); }
+            mat.shader = shader;
+            mat.shaderKeywords = System.Array.Empty<string>();
+            mat.renderQueue = -1;
+            mat.SetTexture("_NormalTex", normal);
+            mat.SetTexture("_FoamTex", ripple);
+            mat.SetColor("_Shallow", lake ? new Color(0.3f, 0.76f, 0.76f) : new Color(0.42f, 0.82f, 0.8f));
+            mat.SetColor("_Deep", lake ? new Color(0.05f, 0.22f, 0.38f) : new Color(0.12f, 0.36f, 0.48f));
+            mat.SetFloat("_DepthDistance", lake ? 2.4f : 1.1f);
+            mat.SetFloat("_Clarity", lake ? 0.6f : 0.75f);
+            mat.SetFloat("_RippleScale", lake ? 0.16f : 0.5f);
+            mat.SetFloat("_RippleStrength", lake ? 0.6f : 0.9f);
+            mat.SetVector("_Flow", lake ? new Vector4(0.06f, 0.09f, 0f, 0f) : new Vector4(0f, 0.55f, 0f, 0f));
+            mat.SetFloat("_UVFlow", lake ? 0f : 1f);
+            mat.SetFloat("_Refraction", lake ? 0.025f : 0.035f);
+            mat.SetFloat("_FoamDistance", lake ? 0.1f : 0.08f);
+            mat.SetFloat("_WaveAmp", lake ? 0.05f : 0f);
+            mat.SetFloat("_Gloss", 220f);
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        static Material LegacyWaterMaterial(string name, Color color)
         {
             string path = $"{TexDir}/{name}.mat";
             var m = AssetDatabase.LoadAssetAtPath<Material>(path);

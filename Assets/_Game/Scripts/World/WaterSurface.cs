@@ -17,7 +17,7 @@ namespace FriendSlop.World
 
         void Update()
         {
-            if (_mat == null) return;
+            if (_mat == null || !_mat.HasProperty("_BaseMap")) return; // the stylized water shader scrolls itself
             _offset += flow * Time.deltaTime;
             _offset.x %= 1f; _offset.y %= 1f;
             _mat.SetTextureOffset("_BaseMap", _offset);

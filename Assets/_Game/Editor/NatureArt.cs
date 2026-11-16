@@ -329,7 +329,7 @@ namespace FriendSlop.EditorTools
                 Proto("Flower_4_Group", 0.35f, 0.2f, 0.3f),
                 Proto("Petal_2", 0.5f, 0.6f, 0.9f),
             };
-            field.count = 190000;
+            field.count = 250000;
             field.useTerrain = true;
         }
 

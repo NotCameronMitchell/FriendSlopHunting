@@ -68,6 +68,7 @@ namespace FriendSlop.Weapons
         public WeaponCatalog Catalog => catalog;
         public WeaponDefinition Current => catalog != null ? catalog.Get(Equipped.Value) : null;
         public float SpinUp => _spin;
+        FriendSlop.Fishing.FishingRod _rod;
         /// <summary>The first-person camera (for screen-space HUD effects such as damage numbers).</summary>
         public Camera ViewCamera => playerCamera;
 
@@ -138,6 +139,15 @@ namespace FriendSlop.Weapons
             if (playerCamera)
                 playerCamera.fieldOfView = Mathf.Lerp(playerCamera.fieldOfView, aiming ? def.aimFov * GameSettings.FieldOfView / 75f : GameSettings.FieldOfView + _player.FovBonus, Time.deltaTime * 12f);
             AnimateViewmodel(def, aiming, controlling ? mouse.delta.ReadValue() : Vector2.zero);
+
+            // The fishing rod has its own little game instead of shooting.
+            _rod ??= GetComponent<FriendSlop.Fishing.FishingRod>();
+            if (def.kind == WeaponKind.Rod)
+            {
+                if (_rod != null) _rod.Tick(canShoot, _muzzle != null ? _muzzle : gunHolder, playerCamera);
+                return;
+            }
+            if (_rod != null && _rod.Active) _rod.Cancel(silent: true);
 
             // Minigun-style spin-up.
             bool trigger = canShoot && (def.IsAuto ? Controls.Held(GameAction.Fire) : Controls.Pressed(GameAction.Fire));
@@ -279,6 +289,7 @@ namespace FriendSlop.Weapons
 
         void Fire(WeaponDefinition def, bool aiming)
         {
+            if (def.kind == WeaponKind.Rod) return; // fishing is handled by FishingRod
             int index = Equipped.Value;
             int seed = Random.Range(int.MinValue, int.MaxValue);
             Transform eye = playerCamera ? playerCamera.transform : transform;
@@ -431,6 +442,18 @@ namespace FriendSlop.Weapons
             var def = catalog.Get(index);
             if (def == null || (origin - transform.position).sqrMagnitude > 25f) return;
 
+            if (def.kind == WeaponKind.Call)
+            {
+                // Everything within earshot gets curious and wanders over... including the things with teeth.
+                int lured = 0;
+                foreach (var a in Animal.All)
+                    if (a != null && a.ServerLure(origin, def.noiseRadius)) lured++;
+                ShotFxRpc(index, origin, dir, seed, aiming);
+                if (lured > 0 && Random.value < 0.35f)
+                    FriendSlop.Game.GameState.Instance?.ServerAnnounce($"{FriendSlop.Game.GameState.PlayerName(OwnerClientId)}'s call got {lured} animal{(lured == 1 ? "" : "s")} curious...");
+                return;
+            }
+
             if (def.noiseRadius > 0f)
             {
                 foreach (var a in Animal.All)
@@ -516,6 +539,9 @@ namespace FriendSlop.Weapons
                         SpawnTracer(gunPos, end);
                     }
                     break;
+                case WeaponKind.Call:
+                case WeaponKind.Rod:
+                    break;
                 default:
                     Projectile.Launch(def, origin + dir * 0.6f, PelletDirections(def, dir, aiming, seed)[0], transform,
                         authority: false, onAnimalHit: null, onExplode: null, onFinished: null);
@@ -587,6 +613,7 @@ namespace FriendSlop.Weapons
                 case ShotSound.Slingshot: clip = Sfx.SlingThwip; maxDist = 30f; break;
                 case ShotSound.Rocket: clip = Sfx.RocketLaunch; break;
                 case ShotSound.Throw: clip = Sfx.Whoosh; maxDist = 30f; break;
+                case ShotSound.Call: clip = Sfx.CritterCall; maxDist = 120f; break;
                 default: clip = Sfx.Gunshot; break;
             }
             if (positional) SfxPlayer.PlayAt(clip, pos, def.soundVolume * 1.2f, def.soundPitch, 6f, maxDist);

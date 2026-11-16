@@ -37,7 +37,7 @@ namespace FriendSlop.EditorTools
                 scenes = scenes,
                 locationPathName = Path.Combine(WindowsDir, ExeName),
                 target = BuildTarget.StandaloneWindows64,
-                options = BuildOptions.None,
+                options = System.Environment.GetEnvironmentVariable("FSH_DEV_BUILD") == "1" || File.Exists("Temp/fsh_dev_build") ? BuildOptions.Development : BuildOptions.None,
             });
 
             if (report.summary.result != BuildResult.Succeeded)
@@ -47,7 +47,9 @@ namespace FriendSlop.EditorTools
             }
 
             // Lets the Steam overlay (invites) attach when the exe isn't launched through Steam.
-            File.WriteAllText(Path.Combine(WindowsDir, "steam_appid.txt"), "480");
+            File.WriteAllText(Path.Combine(WindowsDir, "steam_appid.txt"), "480"); // Valve's test app: replace with our own App ID before any public release
+            // License notices that must ship with the game (MIT for Facepunch.Steamworks; CC0 credits).
+            if (File.Exists("THIRD_PARTY_NOTICES.md")) File.Copy("THIRD_PARTY_NOTICES.md", Path.Combine(WindowsDir, "THIRD_PARTY_NOTICES.txt"), true);
 
             // Unity's debug-symbol folder isn't needed by players.
             foreach (var dir in Directory.GetDirectories(WindowsDir, "*BurstDebugInformation_DoNotShip"))

@@ -28,6 +28,11 @@ namespace FriendSlop.Profile
         public int bossKills;
         public int xp; // hunter experience (levels unlock upgrades)
         public int moneyEarnedWithTeam;
+        public int fishCaught;
+        public bool tutorialSeen; // the first-hunt tour was offered (taken or declined)
+        public float biggestFishKg;
+        public string biggestFish = "";
+        public List<SpeciesCount> fishBySpecies = new List<SpeciesCount>();
         public List<string> speciesKilled = new List<string>();
         public List<SpeciesCount> killsBySpecies = new List<SpeciesCount>();
 
@@ -184,6 +189,22 @@ namespace FriendSlop.Profile
             foreach (var c in killsBySpecies) if (c.species == species) return c.count;
             return 0;
         }
+
+        /// <summary>Catch log: count per species and your personal best. Saves.</summary>
+        public void RecordFish(string species, float kg)
+        {
+            fishCaught++;
+            bool newSpecies = true;
+            for (int i = 0; i < fishBySpecies.Count; i++)
+                if (fishBySpecies[i].species == species) { var c = fishBySpecies[i]; c.count++; fishBySpecies[i] = c; newSpecies = false; break; }
+            if (newSpecies) fishBySpecies.Add(new SpeciesCount { species = species, count = 1 });
+            if (species != "Old Boot" && kg > biggestFishKg) { biggestFishKg = kg; biggestFish = species; }
+            Save();
+            if (newSpecies) FishLogged?.Invoke(species);
+        }
+
+        /// <summary>Fires when a species is added to the catch log for the first time.</summary>
+        public static event Action<string> FishLogged;
 
         public void RecordKill(string species, bool headshot, bool jumpShot, bool longShot, bool boss)
         {

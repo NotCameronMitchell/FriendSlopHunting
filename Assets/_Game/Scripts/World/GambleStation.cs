@@ -124,6 +124,7 @@ namespace FriendSlop.World
             string who = GameState.PlayerName(sender);
             amount = Mathf.Clamp(amount, GambleBetSpot.BetSizes[0], GambleBetSpot.BetSizes[^1]);
             if (Busy) return;
+            if (LevelOf(sender) < LodgeLevel) { state.ServerAnnounce($"The Lucky Lodge won't take {who}'s money until hunter level {LodgeLevel}."); return; }
             if (!state.ServerTrySpend(amount)) { state.ServerAnnounce($"{who} can't cover a ${amount:N0} bet. Go hunt!"); return; }
             ServerPlay(amount, option, who, fromAnimal: false, animalName: null);
         }
@@ -131,8 +132,34 @@ namespace FriendSlop.World
         void OnTriggerStay(Collider other)
         {
             if (!IsHost || Busy || GameState.Instance == null) return;
+            var fish = other.GetComponentInParent<FriendSlop.Fishing.FishCatch>();
+            if (fish != null && fish.IsSpawned && !fish.Carry.IsHeld && !fish.Species.Junk)
+            {
+                ulong angler = fish.Carry.LastHolder;
+                if (angler != FriendSlop.Interaction.Carryable.NoHolder && LevelOf(angler) < LodgeLevel) return;
+                int fstake = Mathf.Max(1, fish.SaleValue);
+                string fname = fish.DisplayName;
+                Vector3 fl = transform.InverseTransformPoint(fish.transform.position);
+                int fopt = game == GambleGame.Roulette ? (new Vector2(fl.x, fl.z).magnitude < 0.45f ? 2 : fl.x > 0f ? 0 : 1) : 0;
+                fish.NetworkObject.Despawn(true);
+                ServerPlay(fstake, fopt, "", fromAnimal: true, animalName: fname);
+                return;
+            }
             var animal = other.GetComponentInParent<Animal>();
             if (animal == null || !animal.IsSpawned || !animal.IsDead.Value || animal.Carry.IsHeld) return;
+            ulong thrower = animal.Carry.LastHolder;
+            if (thrower != FriendSlop.Interaction.Carryable.NoHolder && LevelOf(thrower) < LodgeLevel)
+            {
+                // Too green to gamble: bounce the carcass back out (and only complain every few seconds).
+                if (animal.TryGetComponent(out Rigidbody rb) && !rb.isKinematic)
+                    rb.linearVelocity = (animal.transform.position - transform.position).normalized * 4f + Vector3.up * 4f;
+                if (Time.time > _nextRefusal)
+                {
+                    _nextRefusal = Time.time + 4f;
+                    GameState.Instance.ServerAnnounce($"The Lucky Lodge opens at hunter level {LodgeLevel}. Come back later, {GameState.PlayerName(thrower)}!");
+                }
+                return;
+            }
             if (!_taken.Add(animal)) return;
             int stake = Mathf.Max(1, animal.SaleValue);
             string name = animal.DisplayName;
@@ -143,6 +170,12 @@ namespace FriendSlop.World
             animal.NetworkObject.Despawn(true);
             ServerPlay(stake, option, "", fromAnimal: true, animalName: name);
         }
+
+        /// <summary>Hunter level needed to gamble at the Lucky Lodge.</summary>
+        public const int LodgeLevel = 5;
+        float _nextRefusal;
+
+        static int LevelOf(ulong clientId) => FriendSlop.Player.PlayerProgress.Of(clientId) is { } p ? p.Level.Value : 1;
 
         void ServerPlay(int stake, int option, string who, bool fromAnimal, string animalName)
         {
@@ -695,6 +728,7 @@ namespace FriendSlop.World
 
         void Update()
         {
+            _mpb ??= new MaterialPropertyBlock(); // (Awake normally makes it; be safe if Update ever runs first)
             // Marquee bulbs: lazy chase when idle, racing while spinning, strobing on a win or a tease.
             if (bulbs.Length > 0)
             {

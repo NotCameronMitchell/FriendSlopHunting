@@ -12,6 +12,13 @@
 *.controller text merge=unityyamlmerge eol=lf
 *.meta    text eol=lf
 
+# Unity writes some .asset files in BINARY even with Force Text (baked navmeshes, terrain heightmaps).
+# Treating them as text makes git rewrite their line endings and silently corrupts them.
+*NavMesh.asset            binary
+*_NavMesh.asset           binary
+Assets/_Game/Data/Terrain/*.asset binary
+LightingData.asset        binary
+
 # Large binaries go through Git LFS
 # 3D models
 *.fbx filter=lfs diff=lfs merge=lfs -text

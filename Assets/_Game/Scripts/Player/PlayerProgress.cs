@@ -46,6 +46,22 @@ namespace FriendSlop.Player
             KillCreditRpc(new FixedString32Bytes(species.displayName), (int)style, species.isBoss, xp);
         }
 
+        /// <summary>Host: credit a fish catch (XP + the catch log).</summary>
+        public void ServerCreditCatch(int kind, float kg)
+        {
+            if (!IsServer) return;
+            var sp = FriendSlop.Fishing.FishSpecies.Get(kind);
+            int xp = sp.Junk ? 1 : Mathf.RoundToInt(3 + sp.Price * 0.25f);
+            CatchCreditRpc(kind, kg, xp);
+        }
+
+        [Rpc(SendTo.Owner)]
+        void CatchCreditRpc(int kind, float kg, int xp)
+        {
+            PlayerProfile.Current.AddXp(xp);
+            PlayerProfile.Current.RecordFish(FriendSlop.Fishing.FishSpecies.Get(kind).Name, kg);
+        }
+
         [Rpc(SendTo.Owner)]
         void KillCreditRpc(FixedString32Bytes species, int style, bool boss, int xp)
         {

@@ -87,9 +87,11 @@ namespace FriendSlop.Game
         void DrawWeapons(GameState state, PlayerWeapons weapons)
         {
             bool haveTank = FriendSlop.World.Tank.All.Count > 0;
+            int myLevel = FriendSlop.Profile.PlayerProfile.Current.Level;
+            bool tankLocked = !haveTank && myLevel < GameState.TankLevel;
             if (Row("Tank", "Seats a driver, a gunner and two riders. Explosive cannon. Flattens anything it runs over. Rolls out at the garage.",
-                    haveTank ? "Owned" : $"${GameState.TankPrice:N0}", haveTank ? "Recall" : "Buy",
-                    haveTank || state.Money.Value >= GameState.TankPrice, "VEHICLE"))
+                    haveTank ? "Owned" : $"${GameState.TankPrice:N0}", haveTank ? "Recall" : tankLocked ? $"Lv {GameState.TankLevel}" : "Buy",
+                    !tankLocked && (haveTank || state.Money.Value >= GameState.TankPrice), tankLocked ? $"VEHICLE · UNLOCKS AT LV {GameState.TankLevel}" : "VEHICLE"))
                 state.RequestTank();
 
             var catalog = weapons.Catalog;
@@ -98,8 +100,10 @@ namespace FriendSlop.Game
                 var def = catalog.Get(i);
                 if (def == null) continue;
                 bool owned = weapons.Owns(i);
-                string action = owned ? (i == 0 ? "Always yours" : "In your bag") : "Buy";
-                if (Row(def.displayName, def.blurb, def.price == 0 ? "Free" : $"${def.price:N0}", action, !owned && state.Money.Value >= def.price))
+                bool locked = !owned && myLevel < def.requiredLevel;
+                string action = owned ? (i == 0 ? "Always yours" : "In your bag") : locked ? $"Lv {def.requiredLevel}" : "Buy";
+                if (Row(def.displayName, def.blurb, def.price == 0 ? "Free" : $"${def.price:N0}", action, !owned && !locked && state.Money.Value >= def.price,
+                        locked ? $"UNLOCKS AT LV {def.requiredLevel}" : null))
                     state.RequestBuyWeapon(i);
             }
         }

@@ -209,6 +209,17 @@ namespace FriendSlop.Audio
             });
         }
 
+        static AudioClip _critterCall;
+        /// <summary>A goofy duck-call kazoo: two nasal honks and a warble.</summary>
+        public static AudioClip CritterCall => _critterCall ??= Build("CritterCall", 1.1f, (t, i, s) =>
+        {
+            double seg = t < 0.28 ? t : t < 0.56 ? t - 0.28 : t - 0.56;
+            double f = t < 0.56 ? 520 - 180 * (seg / 0.28) : 380 + 90 * Math.Sin(2 * Math.PI * 7 * seg);
+            s.Phase += 2 * Math.PI * f / Rate;
+            double env = t < 0.56 ? Math.Min(1, seg / 0.015) * Math.Exp(-seg * 5) : Math.Min(1, seg / 0.02) * Math.Exp(-seg * 4);
+            return Buzz(s.Phase, 14) * env * 0.5;
+        });
+
         // ---- UI sounds: short, soft and pitched so they never compete with gunfire.
         static AudioClip _uiHover, _uiClick, _killConfirm, _fanfare;
         public static AudioClip UiHover => _uiHover ??= Build("UiHover", 0.05f, (t, i, s) => Math.Sin(2 * Math.PI * 1400 * t) * Math.Exp(-t * 90) * 0.35);

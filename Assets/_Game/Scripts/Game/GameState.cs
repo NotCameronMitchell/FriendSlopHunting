@@ -34,9 +34,12 @@ namespace FriendSlop.Game
 
         [SerializeField] WeaponCatalog catalog;
         [SerializeField] GameObject tankPrefab;
+        [SerializeField] GameObject fishPrefab;
+        public GameObject FishPrefab => fishPrefab;
         [SerializeField] Vector3 garagePosition = new Vector3(-12f, 0f, -14f);
         [SerializeField] float garageYaw = 0f;
         public const int TankPrice = 7500;
+        public const int TankLevel = 8;
 
         /// <summary>Ask for the team tank: buys it (team money), or recalls an empty one to the garage for free.</summary>
         public void RequestTank() => TankRpc();
@@ -59,6 +62,8 @@ namespace FriendSlop.Game
                 return;
             }
             if (tankPrefab == null) return;
+            int lv = FriendSlop.Player.PlayerProgress.Of(rpcParams.Receive.SenderClientId) is { } p ? p.Level.Value : 1;
+            if (lv < TankLevel) { AnnounceRpc($"{who} needs hunter level {TankLevel} to buy the tank."); return; }
             if (!ServerTrySpend(TankPrice)) { AnnounceRpc($"{who} can't afford the tank (${TankPrice:N0}). Go hunt!"); return; }
             var go = Instantiate(tankPrefab, spot, Quaternion.Euler(0f, garageYaw, 0f));
             go.GetComponent<NetworkObject>().Spawn(true);
@@ -87,6 +92,12 @@ namespace FriendSlop.Game
             if (!client.PlayerObject.TryGetComponent(out PlayerWeapons weapons) || weapons.Owns(index)) return;
 
             string who = PlayerName(buyer);
+            int level = FriendSlop.Player.PlayerProgress.Of(buyer) is { } prog ? prog.Level.Value : 1;
+            if (level < def.requiredLevel)
+            {
+                AnnounceRpc($"{who} needs hunter level {def.requiredLevel} for the {def.displayName}.");
+                return;
+            }
             if (Money.Value < def.price)
             {
                 AnnounceRpc($"{who} can't afford the {def.displayName} (${def.price:N0}). Go hunt!");

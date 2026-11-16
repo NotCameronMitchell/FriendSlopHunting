@@ -31,6 +31,19 @@ namespace FriendSlop.World
             return best;
         }
 
+        /// <summary>The body of water over p (null when dry), with its surface height.</summary>
+        public static WaterVolume At(Vector3 p, out float surface)
+        {
+            surface = float.NaN;
+            WaterVolume best = null;
+            foreach (var w in All)
+            {
+                float s = w.SurfaceAt(p);
+                if (!float.IsNaN(s) && s > p.y && (best == null || s > surface)) { best = w; surface = s; }
+            }
+            return best;
+        }
+
         float SurfaceAt(Vector3 p)
         {
             if (points.Length == 0) return float.NaN;

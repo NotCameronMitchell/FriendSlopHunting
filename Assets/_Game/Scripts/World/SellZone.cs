@@ -14,6 +14,7 @@ namespace FriendSlop.World
     public class SellZone : MonoBehaviour
     {
         readonly HashSet<Animal> _sold = new HashSet<Animal>();
+        readonly HashSet<FriendSlop.Fishing.FishCatch> _soldFish = new HashSet<FriendSlop.Fishing.FishCatch>();
 
         void Reset() => GetComponent<Collider>().isTrigger = true;
 
@@ -21,6 +22,16 @@ namespace FriendSlop.World
         {
             var nm = NetworkManager.Singleton;
             if (nm == null || !nm.IsServer) return;
+
+            var fish = other.GetComponentInParent<FriendSlop.Fishing.FishCatch>();
+            if (fish != null)
+            {
+                if (!fish.IsSpawned || fish.Carry.IsHeld || !_soldFish.Add(fish)) return;
+                int fv = fish.SaleValue;
+                GameState.Instance?.ServerAddMoney(fv, fish.Species.Junk ? $"SOLD an old boot +${fv}. The trader looks confused." : $"SOLD {fish.DisplayName} ({fish.Kg.Value:0.0} kg) +${fv}");
+                fish.NetworkObject.Despawn(true);
+                return;
+            }
 
             var animal = other.GetComponentInParent<Animal>();
             if (animal == null || !animal.IsSpawned || !animal.IsDead.Value || animal.Carry.IsHeld) return;
@@ -35,6 +46,6 @@ namespace FriendSlop.World
             animal.NetworkObject.Despawn(true);
         }
 
-        void LateUpdate() => _sold.RemoveWhere(a => a == null);
+        void LateUpdate() { _sold.RemoveWhere(a => a == null); _soldFish.RemoveWhere(f => f == null); }
     }
 }

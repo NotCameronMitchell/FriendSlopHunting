@@ -270,6 +270,7 @@ namespace FriendSlop.Animals
             if (dead && !previous)
             {
                 PlayVoice(VoiceKind.Death);
+                FriendSlop.Game.TutorialGuide.NoteAnimalDied(transform.position);
                 if (HitByMeRecently && species != null)
                     FriendSlop.Game.GameHud.ShowKill(species.isBoss ? species.bossTitle : species.displayName, (ShotStyle)KillStyle.Value, SaleValue, species.isBoss ? species.bounty : 0);
             }
@@ -290,7 +291,7 @@ namespace FriendSlop.Animals
 
         void Update()
         {
-            if (!IsSpawned) return;
+            if (!IsSpawned || NetworkManager == null || !NetworkManager.IsListening || NetworkManager.ShutdownInProgress) return; // no RPCs while the session shuts down
 
             if (!IsDead.Value) AnimateHop();
 
@@ -500,6 +501,20 @@ namespace FriendSlop.Animals
                 return;
             }
 
+            if (Time.time < _lureUntil)
+            {
+                // Lured by a call: amble toward it, stopping a few metres short (then look around, confused).
+                _mode = Mode.Wander;
+                _agent.speed = species.wanderSpeed * 1.5f;
+                if (Time.time >= _nextThink)
+                {
+                    if ((transform.position - _lurePos).sqrMagnitude > 5f * 5f) SetDestinationNear(_lurePos, 4f);
+                    else _agent.ResetPath();
+                    _nextThink = Time.time + 1.2f;
+                }
+                return;
+            }
+
             _mode = Mode.Wander;
             _agent.speed = species.wanderSpeed;
             if (Time.time >= _nextThink && (!_agent.hasPath || _agent.remainingDistance < 0.5f))
@@ -630,6 +645,22 @@ namespace FriendSlop.Animals
         }
 
         /// <summary>Server: a shot landed near here.</summary>
+        Vector3 _lurePos;
+        float _lureUntil;
+
+        /// <summary>Host: someone blew a critter call. Curious animals head over for a look (bosses ignore it).</summary>
+        public bool ServerLure(Vector3 from, float radius)
+        {
+            if (!IsServer || IsDead.Value || species == null || species.isBoss) return false;
+            if ((from - transform.position).sqrMagnitude > radius * radius) return false;
+            _lurePos = from;
+            _lureUntil = Time.time + Random.Range(9f, 14f);
+            _panicUntil = 0f;
+            _nextThink = 0f;
+            if (Random.value < 0.4f) VoiceRpc((int)VoiceKind.Idle); // answers back
+            return true;
+        }
+
         public void ServerHearShot(Vector3 impactPoint, Vector3 shooterPosition)
         {
             if (IsDead.Value || species.Fights) return; // fighters don't scare

@@ -163,6 +163,35 @@ namespace FriendSlop.Weapons
                     Point(root, "GripR", new Vector3(0f, 0.06f, -0.01f));
                     break;
 
+                case WeaponModel.Call:
+                    // A wooden duck call: mouthpiece, barrel, flared bell, little lanyard.
+                    Tube(root, new Vector3(0f, 0f, 0.02f), 0.035f, 0.08f, _darkWood);   // mouthpiece
+                    Tube(root, new Vector3(0f, 0f, 0.1f), 0.05f, 0.1f, _wood);           // barrel
+                    Tube(root, new Vector3(0f, 0f, 0.17f), 0.07f, 0.04f, accent);        // band
+                    Tube(root, new Vector3(0f, 0f, 0.21f), 0.09f, 0.05f, _wood);         // bell
+                    Box(root, new Vector3(0f, -0.04f, 0.05f), new Vector3(0.006f, 0.06f, 0.006f), _string);
+                    muzzle = Point(root, "Muzzle", new Vector3(0f, 0f, 0.25f));
+                    Point(root, "GripR", new Vector3(0f, -0.02f, 0.08f));
+                    break;
+
+                case WeaponModel.FishingRod:
+                    // Cork handle, a chunky reel, and a long tapering rod angled up and out.
+                    Tube(root, new Vector3(0f, -0.02f, -0.02f), 0.04f, 0.2f, _wood);                                   // cork handle
+                    Tube(root, new Vector3(0f, -0.02f, 0.09f), 0.03f, 0.03f, _gunmetal);                               // reel seat
+                    Tube(root, new Vector3(-0.045f, -0.05f, 0.06f), 0.08f, 0.035f, accent, Quaternion.Euler(0f, 90f, 0f)); // reel
+                    Box(root, new Vector3(-0.07f, -0.05f, 0.06f), new Vector3(0.012f, 0.012f, 0.05f), _gunmetal);       // reel crank
+                    var rod = new GameObject("Rod").transform;
+                    rod.SetParent(root, false);
+                    rod.localPosition = new Vector3(0f, -0.02f, 0.1f);
+                    rod.localRotation = Quaternion.Euler(-28f, 0f, 0f);
+                    Tube(rod, new Vector3(0f, 0f, 0.3f), 0.022f, 0.6f, _darkWood);
+                    Tube(rod, new Vector3(0f, 0f, 0.75f), 0.014f, 0.32f, _darkWood);
+                    for (int i = 0; i < 3; i++) Tube(rod, new Vector3(0f, -0.012f, 0.25f + i * 0.25f), 0.03f, 0.008f, _metal); // line guides
+                    muzzle = Point(rod, "Muzzle", new Vector3(0f, 0f, 0.92f));
+                    Point(root, "GripR", new Vector3(0f, -0.02f, -0.03f));
+                    Point(root, "GripL", new Vector3(-0.07f, -0.05f, 0.06f));
+                    break;
+
                 case WeaponModel.Boomerang:
                     Capsule(root, new Vector3(-0.07f, 0f, 0.1f), new Vector3(0.05f, 0.1f, 0.02f), accent, Quaternion.Euler(90f, 0f, 0f) * Quaternion.Euler(0f, 0f, 55f));
                     Capsule(root, new Vector3(0.07f, 0f, 0.1f), new Vector3(0.05f, 0.1f, 0.02f), accent, Quaternion.Euler(90f, 0f, 0f) * Quaternion.Euler(0f, 0f, -55f));

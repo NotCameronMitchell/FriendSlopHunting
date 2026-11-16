@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace FriendSlop.Player
 {
-    public enum UpgradeTrack { Sprinter, ThickSkin, StrongBack, SpringBoots, HollowPoints, HairTrigger, SteadyHands }
+    public enum UpgradeTrack { Sprinter, ThickSkin, StrongBack, SpringBoots, HollowPoints, HairTrigger, SteadyHands, Walkie }
 
     /// <summary>
     /// Per-player upgrades for this hunt, bought at the gun shop with team money. Each tier needs a
@@ -29,16 +29,18 @@ namespace FriendSlop.Player
             new Info { Name = "Hollow Points", Description = "+15% weapon damage per tier.", Levels = new[] { 3, 6, 10 }, Costs = new[] { 700, 1800, 4000 } },
             new Info { Name = "Hair Trigger", Description = "+12% fire rate per tier.", Levels = new[] { 5, 9 }, Costs = new[] { 1100, 2800 } },
             new Info { Name = "Steady Hands", Description = "40% tighter spread.", Levels = new[] { 4 }, Costs = new[] { 900 } },
+            new Info { Name = "Walkie-Talkie", Description = "Hear (and be heard by) teammates with walkies anywhere on the map, over crackly radio.", Levels = new[] { 2 }, Costs = new[] { 350 } },
         };
 
         // One field per track: Netcode only discovers NetworkVariables declared as fields (not inside arrays).
         readonly NetworkVariable<int> _sprinter = new(0), _thickSkin = new(0), _strongBack = new(0), _springBoots = new(0),
-            _hollowPoints = new(0), _hairTrigger = new(0), _steadyHands = new(0);
+            _hollowPoints = new(0), _hairTrigger = new(0), _steadyHands = new(0), _walkie = new(0);
 
         NetworkVariable<int> Var(int t) => (UpgradeTrack)t switch
         {
             UpgradeTrack.Sprinter => _sprinter, UpgradeTrack.ThickSkin => _thickSkin, UpgradeTrack.StrongBack => _strongBack,
             UpgradeTrack.SpringBoots => _springBoots, UpgradeTrack.HollowPoints => _hollowPoints, UpgradeTrack.HairTrigger => _hairTrigger,
+            UpgradeTrack.Walkie => _walkie,
             _ => _steadyHands,
         };
 
@@ -53,6 +55,7 @@ namespace FriendSlop.Player
         public float DamageMult => 1f + 0.15f * Tier(UpgradeTrack.HollowPoints);
         public float FireIntervalMult => 1f / (1f + 0.12f * Tier(UpgradeTrack.HairTrigger));
         public float SpreadMult => Tier(UpgradeTrack.SteadyHands) > 0 ? 0.6f : 1f;
+        public bool HasWalkie => Tier(UpgradeTrack.Walkie) > 0;
 
         public override void OnNetworkSpawn() { if (IsOwner) Local = this; }
         public override void OnNetworkDespawn() { if (Local == this) Local = null; }

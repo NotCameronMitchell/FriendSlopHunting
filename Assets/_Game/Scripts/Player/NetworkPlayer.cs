@@ -33,6 +33,47 @@ namespace FriendSlop.Player
         /// <summary>In a cabin bed. When every hunter is asleep at night, the host skips to morning.</summary>
         public readonly NetworkVariable<bool> Sleeping = new NetworkVariable<bool>(false,
             NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+        /// <summary>Current emote (0 none, 1 dance, 2 cheer). Owner writes; everyone animates it.</summary>
+        public readonly NetworkVariable<byte> Emote = new NetworkVariable<byte>(0,
+            NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+        HunterBody _hunterBody;
+        float _reviveHold;
+        public const float ReviveSeconds = 3f;
+
+        /// <summary>Every peer: feed the hunter model its emote, voice loudness and who to look at.</summary>
+        void UpdateSocial()
+        {
+            if (_hunterBody == null) _hunterBody = GetComponentInChildren<HunterBody>();
+            if (_hunterBody == null) return;
+            _hunterBody.Emote = Emote.Value;
+            _hunterBody.TalkLevel = FriendSlop.Net.VoiceChat.Level(OwnerClientId);
+            // Look at the nearest other hunter who's talking (within 14 m).
+            Vector3? look = null;
+            float best = 14f * 14f;
+            foreach (var p in All)
+            {
+                if (p == null || p == this || !p.IsSpawned || FriendSlop.Net.VoiceChat.Level(p.OwnerClientId) <= 0.01f) continue;
+                float d = (p.transform.position - transform.position).sqrMagnitude;
+                if (d < best) { best = d; look = p.transform.position + Vector3.up * 1.5f; }
+            }
+            _hunterBody.LookAtPoint = look;
+        }
+
+        /// <summary>Owner: the closest downed teammate in reach (for reviving), or null.</summary>
+        PlayerHealth NearestDowned(float range)
+        {
+            PlayerHealth best = null;
+            float bestD = range * range;
+            foreach (var p in All)
+            {
+                if (p == null || p == this || !p.IsSpawned) continue;
+                var h = p.GetComponent<PlayerHealth>();
+                if (h == null || !h.IsSpawned || !h.IsDown.Value) continue;
+                float d = (p.transform.position - transform.position).sqrMagnitude;
+                if (d < bestD) { bestD = d; best = h; }
+            }
+            return best;
+        }
         FriendSlop.World.Bed _bed;
 
         // Tank seat (every peer tracks it so the body can sit; the owner also drives the camera/position).
@@ -409,6 +450,7 @@ namespace FriendSlop.Player
             if (!IsSpawned) return;
             UpdateFootsteps();
             TrackTankSeat();
+            UpdateSocial();
             if (!IsOwner) return;
 
             if (Keyboard.current == null || Mouse.current == null) return;
@@ -474,6 +516,10 @@ namespace FriendSlop.Player
                 GameMenus.Show(GameMenus.Menu.Pause);
                 return;
             }
+
+            // Emote: B cycles dance → cheer → stop. Moving stops it too (see Move).
+            if (Controls.Pressed(GameAction.Emote) && !IsCarrying)
+                Emote.Value = (byte)((Emote.Value + 1) % 3);
 
             // Clicked back into the game window after alt-tabbing: grab the mouse again.
             if (Cursor.lockState != CursorLockMode.Locked && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
@@ -546,6 +592,7 @@ namespace FriendSlop.Player
             if (_upgrades) speed *= _upgrades.SpeedMult;
             if (_items) speed *= _items.SpeedMult; // energy drink
             if (IsCarrying) speed *= CarrySpeedFactor();
+            if (IsOwner && Emote.Value != 0 && input.sqrMagnitude > 0.01f) Emote.Value = 0; // walking off ends the emote
             Vector3 horizontal = (transform.right * input.x + transform.forward * input.y) * speed + _knockback;
             _knockback = Vector3.MoveTowards(_knockback, Vector3.zero, 22f * Time.deltaTime);
 
@@ -624,6 +671,26 @@ namespace FriendSlop.Player
             }
 
             GambleBetSpot.Focused = false;
+            // Revive a downed friend: stand next to them and hold E.
+            var downed = NearestDowned(2.8f);
+            if (downed != null)
+            {
+                string name = GameState.PlayerName(downed.OwnerClientId);
+                if (controlling && Controls.Held(GameAction.Interact))
+                {
+                    _reviveHold += Time.deltaTime;
+                    int bars = Mathf.Clamp(Mathf.FloorToInt(_reviveHold / ReviveSeconds * 10f), 0, 10);
+                    LocalHint = $"Reviving {name}  [{new string('|', bars)}{new string('.', 10 - bars)}]";
+                    if (_reviveHold >= ReviveSeconds) { downed.RequestRevive(); _reviveHold = 0f; }
+                }
+                else
+                {
+                    _reviveHold = 0f;
+                    LocalHint = $"Hold E to revive {name}";
+                }
+                return;
+            }
+            _reviveHold = 0f;
             var target = LookAtCarryable();
             if (target == null)
             {

@@ -85,14 +85,15 @@ namespace FriendSlop.EditorTools
             var spawner = BuildSpawnerPrefab();
             GameObject bossPrefab = null, hogPrefab = null;
             foreach (var a in animals)
-                if (a.Species.isBoss) { if (a.Species.bossTitle.Contains("Hamzilla")) hogPrefab = a.Prefab; else bossPrefab = a.Prefab; }
+                if (a.Species.isBoss) { if (a.Species.displayName == "Hog") hogPrefab = a.Prefab; else bossPrefab = a.Prefab; }
             var totem = BuildTotemPrefab(bossPrefab);
             _hogTotemPrefab = BuildTotemPrefab(hogPrefab, "HogTotem", hog: true, cost: 350);
             _lootCratePrefab = BuildLootCratePrefab();
             var tank = BuildTankPrefab();
-            var gameState = BuildGameStatePrefab(catalog, animals, tank);
+            var fish = BuildFishPrefab();
+            var gameState = BuildGameStatePrefab(catalog, animals, tank, fish);
 
-            var networked = new List<GameObject> { player, box, gameState, spawner, pickup, totem, tank, _hogTotemPrefab, _lootCratePrefab };
+            var networked = new List<GameObject> { player, box, gameState, spawner, pickup, totem, tank, _hogTotemPrefab, _lootCratePrefab, fish };
             foreach (var a in animals) networked.Add(a.Prefab);
             var prefabList = RegisterNetworkPrefabs(networked.ToArray());
 
@@ -274,6 +275,8 @@ namespace FriendSlop.EditorTools
             root.AddComponent<PlayerProgress>();
             root.AddComponent<PlayerUpgrades>();
             root.AddComponent<PlayerItems>();
+            root.AddComponent<FriendSlop.Fishing.FishingRod>();
+            root.AddComponent<FriendSlop.Net.VoiceChat>();
             var look = root.AddComponent<PlayerAppearance>();
             var lso = new SerializedObject(look);
             lso.FindProperty("nameTagMaterial").objectReferenceValue = Mats.TryGetValue("WorldText", out var tagMat) ? tagMat : null;
@@ -329,7 +332,29 @@ namespace FriendSlop.EditorTools
 
         // =========================================================== Scene
 
-        static GameObject BuildGameStatePrefab(WeaponCatalog catalog, List<AnimalBuilder.Built> animals, GameObject tank)
+        /// <summary>A caught fish: carryable, sellable; the model is built at runtime from its species.</summary>
+        static GameObject BuildFishPrefab()
+        {
+            var root = new GameObject("Fish");
+            var rb = root.AddComponent<Rigidbody>();
+            rb.mass = 1f;
+            rb.isKinematic = true;
+            rb.interpolation = RigidbodyInterpolation.None;
+            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            var col = root.AddComponent<BoxCollider>();
+            col.size = new Vector3(0.1f, 0.15f, 0.45f);
+            col.center = new Vector3(0f, 0.08f, 0f);
+            root.AddComponent<NetworkObject>();
+            var nt = root.AddComponent<NetworkTransform>();
+            nt.AuthorityMode = NetworkTransform.AuthorityModes.Owner;
+            nt.SyncScaleX = nt.SyncScaleY = nt.SyncScaleZ = false;
+            nt.Interpolate = true;
+            root.AddComponent<FriendSlop.Interaction.Carryable>();
+            root.AddComponent<FriendSlop.Fishing.FishCatch>();
+            return SavePrefab(root, $"{PrefabDir}/Fish.prefab");
+        }
+
+        static GameObject BuildGameStatePrefab(WeaponCatalog catalog, List<AnimalBuilder.Built> animals, GameObject tank, GameObject fish)
         {
             var go = new GameObject("GameState");
             go.AddComponent<NetworkObject>();
@@ -337,6 +362,7 @@ namespace FriendSlop.EditorTools
             var so = new SerializedObject(state);
             so.FindProperty("catalog").objectReferenceValue = catalog;
             so.FindProperty("tankPrefab").objectReferenceValue = tank;
+            so.FindProperty("fishPrefab").objectReferenceValue = fish;
             so.FindProperty("garagePosition").vector3Value = GaragePos;
             so.FindProperty("garageYaw").floatValue = Quaternion.LookRotation(-new Vector3(GaragePos.x, 0f, GaragePos.z).normalized).eulerAngles.y;
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -473,7 +499,7 @@ namespace FriendSlop.EditorTools
             var rng = new System.Random(1337); // same forest every rebuild
             var trees = new GameObject("Trees").transform;
             trees.SetParent(world, false);
-            for (int i = 0, placed = 0; i < 14000 && placed < 1550; i++)
+            for (int i = 0, placed = 0; i < 20000 && placed < 2150; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
                 if (p.magnitude < CampClearRadius || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || NearLandmark(p, 4f) || !Wild(p, 3f, 30f)) continue;
@@ -485,7 +511,7 @@ namespace FriendSlop.EditorTools
 
             var rocks = new GameObject("Rocks").transform;
             rocks.SetParent(world, false);
-            for (int i = 0, placed = 0; i < 3000 && placed < 330; i++)
+            for (int i = 0, placed = 0; i < 4200 && placed < 460; i++)
             {
                 Vector3 p = RandomInMap(rng, MapHalfSize - 4f);
                 if (p.magnitude < CampClearRadius - 4f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || NearLandmark(p, 2f) || (p - SellZonePos).magnitude < 9f || !Wild(p, 1.5f, 45f)) continue;
@@ -496,7 +522,7 @@ namespace FriendSlop.EditorTools
 
             var decor = new GameObject("Decor").transform;
             decor.SetParent(world, false);
-            NatureArt.Decor(decor, rng, MapHalfSize - 3f, 3600,
+            NatureArt.Decor(decor, rng, MapHalfSize - 3f, 4900,
                 p => p.magnitude < CampClearRadius + 1f || NearGunShop(p) || NearTotem(p) || NearCabin(p) || NearLodge(p) || NearGarage(p) || NearLandmark(p, 0f) || (p - SellZonePos).magnitude < 4f || !Wild(p, 0.8f, 32f),
                 GroundY);
             // Sit every rock and plant flush: drop each one so its lowest point is at the lowest ground under its footprint.
@@ -505,12 +531,12 @@ namespace FriendSlop.EditorTools
             // the long slopes and hide the texture stretching on steep faces.
             var boulders = new GameObject("Boulders").transform;
             boulders.SetParent(world, false);
-            for (int i = 0, placed = 0; i < 9000 && placed < 420; i++)
+            for (int i = 0, placed = 0; i < 12000 && placed < 560; i++)
             {
                 float bh = TerrainBuilder.Half - 12f;
                 var p = new Vector3(((float)rng.NextDouble() * 2f - 1f) * bh, 0f, ((float)rng.NextDouble() * 2f - 1f) * bh);
                 float ring = Mathf.Pow(Mathf.Pow(Mathf.Abs(p.x), 4f) + Mathf.Pow(Mathf.Abs(p.z), 4f), 0.25f);
-                if (ring < 150f || TerrainBuilder.NearWater(p, 4f) || NearLandmark(p, 6f) || NearTotem(p)) continue;
+                if (ring < 180f || TerrainBuilder.NearWater(p, 4f) || NearLandmark(p, 6f) || NearTotem(p)) continue;
                 float st = Steep(p);
                 if (st < 18f || st > 60f) continue;
                 p.y = GroundY(p);
@@ -523,7 +549,7 @@ namespace FriendSlop.EditorTools
                 float bh = TerrainBuilder.Half - 12f;
                 var p = new Vector3(((float)rng.NextDouble() * 2f - 1f) * bh, 0f, ((float)rng.NextDouble() * 2f - 1f) * bh);
                 float ring = Mathf.Pow(Mathf.Pow(Mathf.Abs(p.x), 4f) + Mathf.Pow(Mathf.Abs(p.z), 4f), 0.25f);
-                if (ring < 170f || TerrainBuilder.NearWater(p, 6f) || NearLandmark(p, 10f) || NearTotem(p)) continue;
+                if (ring < 205f || TerrainBuilder.NearWater(p, 6f) || NearLandmark(p, 10f) || NearTotem(p)) continue;
                 float st = Steep(p);
                 if (st < 26f || st > 70f) continue;
                 p.y = GroundY(p);
