@@ -1,0 +1,54 @@
+# Text files: normalize line endings; Unity YAML merges best as text
+* text=auto
+*.cs      text diff=csharp
+*.md      text
+*.json    text
+*.asmdef  text
+*.unity   text merge=unityyamlmerge eol=lf
+*.prefab  text merge=unityyamlmerge eol=lf
+*.asset   text merge=unityyamlmerge eol=lf
+*.mat     text merge=unityyamlmerge eol=lf
+*.anim    text merge=unityyamlmerge eol=lf
+*.controller text merge=unityyamlmerge eol=lf
+*.meta    text eol=lf
+
+# Unity writes some .asset files in BINARY even with Force Text (baked navmeshes, terrain heightmaps).
+# Treating them as text makes git rewrite their line endings and silently corrupts them.
+*NavMesh.asset            binary
+*_NavMesh.asset           binary
+Assets/_Game/Data/Terrain/*.asset binary
+LightingData.asset        binary
+
+# Large binaries go through Git LFS
+# 3D models
+*.fbx filter=lfs diff=lfs merge=lfs -text
+*.obj filter=lfs diff=lfs merge=lfs -text
+*.blend filter=lfs diff=lfs merge=lfs -text
+*.glb filter=lfs diff=lfs merge=lfs -text
+*.gltf filter=lfs diff=lfs merge=lfs -text
+# Images
+*.png filter=lfs diff=lfs merge=lfs -text
+*.jpg filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.psd filter=lfs diff=lfs merge=lfs -text
+*.tga filter=lfs diff=lfs merge=lfs -text
+*.tif filter=lfs diff=lfs merge=lfs -text
+*.exr filter=lfs diff=lfs merge=lfs -text
+*.hdr filter=lfs diff=lfs merge=lfs -text
+# Audio
+*.wav filter=lfs diff=lfs merge=lfs -text
+*.mp3 filter=lfs diff=lfs merge=lfs -text
+*.ogg filter=lfs diff=lfs merge=lfs -text
+# Fonts / native libs
+*.ttf filter=lfs diff=lfs merge=lfs -text
+*.otf filter=lfs diff=lfs merge=lfs -text
+*.dll filter=lfs diff=lfs merge=lfs -text
+*.so filter=lfs diff=lfs merge=lfs -text
+*.bundle filter=lfs diff=lfs merge=lfs -text
+# Lighting / terrain data
+*.lightmap filter=lfs diff=lfs merge=lfs -text
+LightingData.asset filter=lfs diff=lfs merge=lfs -text
+*.terrainlayer filter=lfs diff=lfs merge=lfs -text
+
+# Terrain data is binary (Unity writes TerrainData as binary): store it byte-for-byte in LFS
+Assets/_Game/Data/Terrain/*.asset filter=lfs diff=lfs merge=lfs -text
